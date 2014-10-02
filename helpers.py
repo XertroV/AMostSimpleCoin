@@ -32,8 +32,11 @@ def global_hash(msg: bytes):
 def hash_block(block: Encodium):
     return global_hash(bytes(block.serialize()))
 
-def target_to_diff(target):
-    return ONE_WORK_HASH // target
+def hash_target_to_work_target(hash_target):
+    return ONE_WORK_HASH // hash_target
+
+def work_target_to_hash_target(work_target):
+    return ONE_WORK_HASH // work_target
 
 def exclude_from(a, b):  # operates on paths
     return [i for i in a if i not in set(b)]

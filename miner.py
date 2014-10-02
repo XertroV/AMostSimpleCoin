@@ -26,12 +26,15 @@ class Miner:
 
     def restart(self):
         self.stop()
-        self.start(**self._mining_kwargs)
+        self.start()
+
+    def run(self, work_target=10**6):
+        while True:
+            self.start()
+            self._mining_thread.join()
 
     def start(self, work_target=10**6):
-        #self._mining_kwargs = {'coinbase': coinbase, 'tx': tx, 'target': target}
-        self._mining_kwargs = {'work_target': work_target}
-        candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce, **self._mining_kwargs)
+        candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce, work_target=work_target)
 
         self._stop = False
         self._mining_thread = fire(target=self._start_mining, args=[candidate])
@@ -43,16 +46,17 @@ class Miner:
                      candidate.to_json().split(
                          str(self._special_nonce).encode())
         )
-        def serd_block_from_nonce(n):
+        def serialized_block_from_nonce(n):
             return m1 + str(n).encode() + m2
 
         nonce = 3056000  # normally start at 0
-        target = candidate.target
+        work_target = candidate.work_target
+        hash_target = work_target_to_hash_target(work_target)
         self._running = True
         while not self._stop:
-            h = global_hash(serd_block_from_nonce(nonce))
-            if h < target:
-                candidate = SimpleBlock.from_json(serd_block_from_nonce(nonce).decode())
+            h = global_hash(serialized_block_from_nonce(nonce))
+            if h < hash_target:
+                candidate = SimpleBlock.from_json(serialized_block_from_nonce(nonce).decode())
                 break
             nonce += 1
             # if nonce % 100000 == 0: print(nonce)
@@ -63,14 +67,3 @@ class Miner:
 
         if self._run_forever and not self._stop:
             self.start(work_target=candidate.work_target)
-
-
-if __name__ == '__main__':
-    try:
-        m = Miner(graph)
-        while True:
-            m.start(0)
-            m._mining_thread.join()
-    except KeyboardInterrupt:
-        m.stop()
-    print(graph.head.parent_hash)
