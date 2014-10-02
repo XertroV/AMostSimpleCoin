@@ -25,7 +25,7 @@ from miner import Miner
 
 db = Database()
 
-root_block = SimpleBlock(links=[], work_target=(256 ** 3), total_work=(256 ** 2), timestamp=0, nonce=1901667)
+root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437)
 chain = Chain(root_block)
 chain.load_from_db(db)
 
@@ -37,15 +37,20 @@ p2p = Network(seeds=seeds, address=('0.0.0.0', port), debug=True)
 
 set_message_handlers(chain, p2p)
 
+# inbuilt miner
+
+miner = Miner(chain, p2p)
+
 # Create root
 if "-create_root" in sys.argv:
-    m = Miner(chain, p2p)
-    root = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=int(time.time()), nonce=m._special_nonce)
-    print(m.mine_this_block(root).to_json())
+    root = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=int(time.time()), nonce=miner._special_nonce)
+    print(miner.mine_this_block(root).to_json())
 
 # Go time!
 
 try:
+    if "-mine" in sys.argv:
+        miner.start(10**6)
     start_threads(chain, p2p)
     p2p.run()
 finally:
