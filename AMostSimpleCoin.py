@@ -41,7 +41,7 @@ set_message_handlers(chain, p2p)
 if "-create_root" in sys.argv:
     m = Miner(chain, p2p)
     root = SimpleBlock(links=[], work_target=10**6, total_work=0, timestamp=int(time.time()), nonce=m._special_nonce)
-    print(m._miner_this_block(root))
+    print(m.mine_this_block(root).to_json(), root.hash)
 
 # Go time!
 

@@ -16,6 +16,7 @@ class Miner:
         self._p2p = p2p
         self._running = False
         self._mining_thread = None
+        self._stop = False
 
     def set_graph(self, graph):
         self._chain = graph
@@ -40,13 +41,10 @@ class Miner:
         self._mining_thread = fire(target=self._start_mining, args=[candidate])
         self._mining_thread.join()
 
-    def _miner_this_block(self, candidate: SimpleBlock):
+    def mine_this_block(self, candidate: SimpleBlock):
 
         # hack to replace a known special nonce, increase hash rate by modifying serialized blocks.
-        m1, m2 = map(bytes,
-                     candidate.to_json().split(
-                         str(self._special_nonce).encode())
-        )
+        m1, m2 = map(lambda x : x.encode(), candidate.to_json().split(str(self._special_nonce)))
         def serialized_block_from_nonce(n):
             return m1 + str(n).encode() + m2
 
@@ -67,7 +65,7 @@ class Miner:
 
     def _start_mining(self, candidate):
 
-        candidate = self._miner_this_block(candidate)
+        candidate = self.mine_this_block(candidate)
         if self._chain: self._chain.add_blocks([candidate])
         if self._p2p: self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate))
         self._running = False
