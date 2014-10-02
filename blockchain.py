@@ -36,6 +36,7 @@ class Chain:
         return self.block_index[block_hash]
 
     def add_blocks(self, blocks):
+        print(blocks)
         # todo : design some better sorting logic.
         # we should check if orphan chains match up with what we've added, if so add the orphan chain.
         rejects = []
@@ -73,9 +74,8 @@ class Chain:
     def reorganize_to(self, block):
         print('reorg from %064x\nto         %064x\n' % (self.head.hash, block.hash))
         pivot = self.find_pivot(self.head, block)
-        #self.mass_unapply(Chain.order_from(pivot, self.head)[1:])
-        #self.mass_apply(Chain.order_from(pivot, block)[1:])
-        #print("Chain.reorganize_to", block.hash)
+        self.mass_unapply(Chain.order_from(pivot, self.head)[1:])
+        self.mass_apply(Chain.order_from(pivot, block)[1:])
         self.head = block
 
     # Coin & State methods

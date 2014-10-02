@@ -30,7 +30,8 @@ class Miner:
         self.start()
 
     def run(self, work_target=10**6):
-        while True:
+        nice_sleep(self._p2p, 3)  # warm up
+        while not self._stop:
             self.start()
 
     def start(self, work_target=10**6):
@@ -39,6 +40,16 @@ class Miner:
         self._stop = False
         self._mining_thread = fire(target=self._start_mining, args=[candidate])
         self._mining_thread.join()
+
+    def _start_mining(self, candidate):
+
+        candidate = self.mine_this_block(candidate)
+        if self._chain: self._chain.add_blocks([candidate])
+        if self._p2p: self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate))
+        self._running = False
+
+        if self._run_forever and not self._stop:
+            self.start(work_target=candidate.work_target)
 
     def mine_this_block(self, candidate: SimpleBlock):
 
@@ -61,13 +72,3 @@ class Miner:
             # if nonce % 100000 == 0: print(nonce)
 
         return candidate
-
-    def _start_mining(self, candidate):
-
-        candidate = self.mine_this_block(candidate)
-        if self._chain: self._chain.add_blocks([candidate])
-        if self._p2p: self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate))
-        self._running = False
-
-        if self._run_forever and not self._stop:
-            self.start(work_target=candidate.work_target)
