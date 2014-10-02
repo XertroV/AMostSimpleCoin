@@ -35,7 +35,7 @@ class Miner:
             self._mining_thread.join()
 
     def start(self, work_target=10**6):
-        candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce, work_target=work_target)
+        candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce, work_target=work_target, total_work=self._chain.head.total_work + work_target)
 
         self._stop = False
         self._mining_thread = fire(target=self._start_mining, args=[candidate])

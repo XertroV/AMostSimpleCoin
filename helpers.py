@@ -12,7 +12,7 @@ from SSTT.utils import fire, nice_sleep
 ONE_WORK_HASH = MAX_32_BYTE_INT = 256 ** 32 - 1
 MAX_8_BYTE_INT = 256 ** 8 - 1
 
-FEE_CONSTANT = 10000  # 8000000  # Arbitrary-ish
+FEE_CONSTANT = 1000  # 8000000  # Arbitrary-ish
 
 
 # Functions

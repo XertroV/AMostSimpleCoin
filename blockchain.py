@@ -67,6 +67,7 @@ class Chain:
             self.reorganize_to(block)
         self.all_nodes.add(block)
         self.block_index[block.hash] = block
+        print("Chain._add_block - processed", block.hash)
         return None
 
     def reorganize_to(self, block):
@@ -74,6 +75,7 @@ class Chain:
         pivot = self.find_pivot(self.head, block)
         #self.mass_unapply(Chain.order_from(pivot, self.head)[1:])
         #self.mass_apply(Chain.order_from(pivot, block)[1:])
+        #print("Chain.reorganize_to", block.hash)
         self.head = block
 
     # Coin & State methods
