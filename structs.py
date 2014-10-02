@@ -136,22 +136,7 @@ class SimpleBlock(Encodium):
 
     @property
     def sigma_diff(self):
-        def get_all_blocks_ever():
-            blocks = {}
-            queue = PriorityQueue()
-            curr = self
-            while len(curr.links) > 0:
-                for b in curr.linked_blocks:
-                    queue.put((b.timestamp, b))
-                blocks.add(curr)
-                curr = queue.get()
-            blocks.add(curr)
-            return blocks
-
-        if self._sigma_diff is None:
-            # todo: optimize - only need path from linked blocks LCA
-            self._sigma_diff = sum([i.work_target for i in get_all_blocks_ever()])
-        return self._sigma_diff
+        return self.total_work
 
     @property
     def coins_generated(self):

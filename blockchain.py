@@ -1,4 +1,5 @@
 from copy import deepcopy
+import traceback
 
 from structs import *
 from helpers import *
@@ -36,7 +37,7 @@ class Chain:
         return self.block_index[block_hash]
 
     def add_blocks(self, blocks):
-        print(blocks)
+        print([b.to_json() for b in blocks])
         # todo : design some better sorting logic.
         # we should check if orphan chains match up with what we've added, if so add the orphan chain.
         rejects = []
@@ -49,10 +50,12 @@ class Chain:
             if rejects != blocks:
                 self.add_blocks(rejects)
             else:
+                print('rejects', rejects)
                 for r in rejects:
                     self.orphans.put(r)
         except Exception as e:
             self._restore_backed_up_state()
+            traceback.print_exc()
 
     def _add_block(self, block: SimpleBlock):
         """
@@ -93,6 +96,7 @@ class Chain:
 
     def _modify_state(self, block, direction):
         assert direction in [-1, 1]
+        return
         if block.tx is not None:
             self.state.modify_balance(block.tx.recipient, direction * block.tx.value)
             self.state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)
