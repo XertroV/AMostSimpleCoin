@@ -50,7 +50,7 @@ if "-create_root" in sys.argv:
 
 try:
     start_threads(chain, p2p)
-    fire(miner.run)
+    if "-mine" in sys.argv: fire(miner.run)
     p2p.run()
 finally:
     miner.stop()
