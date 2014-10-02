@@ -5,7 +5,7 @@ from SSTT import Network
 from blockchain import Chain
 from structs import SimpleBlock
 from helpers import fire, global_hash
-
+from message_handlers import *
 
 class Miner:
 
@@ -62,7 +62,7 @@ class Miner:
         self._running = False
 
         if self._run_forever and not self._stop:
-            self.start(candidate.coinbase)
+            self.start(work_target=candidate.work_target)
 
 
 if __name__ == '__main__':

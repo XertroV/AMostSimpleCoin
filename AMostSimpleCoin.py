@@ -15,7 +15,7 @@ from structs import *
 from blockchain import Chain
 from message_handlers import set_message_handlers
 from control_loops import start_threads
-
+from database import Database
 
 # Create chain
 

@@ -1,6 +1,6 @@
 from helpers import *
 from message_handlers import *
-from
+from SSTT.structs import Peer
 
 # Chain crawler thing
 
@@ -87,9 +87,11 @@ def watch_peer_top_blocks_loop(chain: Chain, p2p: Network):
             results = []
             threads = [fire(add_primary_chain_to_results, args=(p, results, block_locator)) for p in peers]
             wait_for_all_threads_to_finish(threads)
+            counter = 0  # the counter ensures hashes added will be sought in the order submitted
             for hashes in results:
+                counter += 1
                 for n, block_hash in enumerate(hashes):
-                    chain.seek_block(n, block_hash)  # todo: maybe a better priority system than just enumeration
+                    chain.seek_block(n + counter * 1000000, block_hash)  # todo: maybe a better priority system than just enumeration
 
         nice_sleep(p2p, 30)  # we don't want to piss people off if this is too frequent
 
