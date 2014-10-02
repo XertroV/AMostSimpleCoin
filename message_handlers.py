@@ -60,7 +60,7 @@ class ChainInfoProvide(Encodium):
     total_work = Integer32Bytes.Definition()
 
 class ChainPrimaryRequest(Encodium):
-    block_locator = List.Definition(SimpleBlock.Definition())
+    block_locator = List.Definition(Hash.Definition())
     chunk_size = Integer8Bytes.Definition()
     chunk_n = Integer8Bytes.Definition()
 
@@ -72,11 +72,16 @@ class ChainPrimaryProvide(Encodium):
 
 def set_message_handlers(chain: Chain, p2p: Network):
 
-    @p2p.method(BlockAnnounce)
+    @p2p.method(BlockAnnounce, BLOCK_ANNOUNCE)
     def block_announce(announcement: BlockAnnounce):
+        print('Got Block Ann')
         if not chain.has_block(announcement.block.hash):
+            print ('Adding block')
             chain.add_blocks([announcement.block])
             p2p.broadcast(BLOCK_ANNOUNCE, announcement)
+            return "True"
+        else:
+            return "False"
 
     @p2p.method(BlockRequest)
     def block_request(request):
@@ -92,7 +97,7 @@ def set_message_handlers(chain: Chain, p2p: Network):
     def chain_info(request):
         return ChainInfoProvide(top_block=chain.head.hash, total_work=chain.head.sigma_diff)
 
-    @p2p.method(ChainPrimaryRequest)
+    @p2p.method(ChainPrimaryRequest, CHAIN_PRIMARY)
     def chain_primary(request):
         start = request.chunk_size * request.chunk_n
 
@@ -107,6 +112,6 @@ def set_message_handlers(chain: Chain, p2p: Network):
             lca = chain.root.hash
 
         return ChainPrimaryProvide(
-            blocks=chain.order_from(chain.get_block(lca), chain.head)[max(0, start - 10):start + request.chunk_size],
+            hashes=[b.hash for b in chain.order_from(chain.get_block(lca), chain.head)[max(0, start - 10):start + request.chunk_size]],
             chunk_n=request.chunk_n,
             chunk_size=request.chunk_size)

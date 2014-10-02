@@ -54,6 +54,11 @@ def wait_for_all_threads_to_finish(threads):
     for t in threads:
         t.join()
 
+def zero_if_none(thing):
+    if thing is None:
+        return 0
+    return thing
+
 # Crypto Helpers
 
 def valid_secp256k1_signature(x, y, msg, r, s):

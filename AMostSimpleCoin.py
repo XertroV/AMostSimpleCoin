@@ -31,8 +31,10 @@ chain.load_from_db(db)
 
 # Initialize P2P
 
-port = 2281
-seeds = [('198.199.102.43', port-1), ('127.0.0.1', port)]
+port = int(sys.argv[sys.argv.index("-port") + 1]) if "-port" in sys.argv else 2281
+extra_seed = sys.argv[sys.argv.index("-seed") + 1].split(":") if "-seed" in sys.argv else ('198.199.102.43', port)
+
+seeds = [(extra_seed[0], int(extra_seed[1]))]
 p2p = Network(seeds=seeds, address=('0.0.0.0', port), debug=True)
 
 set_message_handlers(chain, p2p)

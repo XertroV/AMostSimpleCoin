@@ -14,17 +14,21 @@ def watch_blocks_to_seek(chain: Chain, p2p: Network):
             seek_blocks = get_n_from_pq_and_block(500, chain.blocks_to_seek, timeout=0.1)
         except Empty:
             continue
-        blocks_provided = p2p.request_an_obj_from_hive(BlockProvide, BLOCK_REQUEST, BlockRequest(hashes=[h for tw, h in seek_blocks]))
+        print("seeking blocks", seek_blocks)
+        blocks_provided = p2p.request_an_obj_from_hive(BlockProvide, BLOCK_REQUEST, BlockRequest(hashes=[h for _, h in seek_blocks]))
+        print(blocks_provided.to_json())
+
+        blocks_received = set()
 
         # remove blocks we've been given
         for block in blocks_provided.blocks:
-            pair = (block.total_work, block.hash)
-            if pair in seek_blocks:
-                seek_blocks.remove(pair)
+            blocks_received.add(block.hash)
 
         # add blocks to the chain, seek what we didn't find (if it's not spam)
         chain.add_blocks(blocks_provided.blocks)
         for pair in seek_blocks:
+            if pair[1] in blocks_received:
+                continue
             if pair not in not_found_count:
                 not_found_count[pair] = 0
             not_found_count[pair] += 1
@@ -53,7 +57,7 @@ def watch_peer_top_blocks_loop(chain: Chain, p2p: Network):
         chain_infos = p2p.broadcast_with_response(ChainInfoProvide, CHAIN_INFO, Encodium())
         for chain_info in chain_infos:
             assert isinstance(chain_info, ChainInfoProvide)
-            if chain_info.top_block not in chain.all_nodes:
+            if not chain.has_block(chain_info.top_block):
                 return True
         return False
 
@@ -64,10 +68,11 @@ def watch_peer_top_blocks_loop(chain: Chain, p2p: Network):
         none_counter = 0
         while none_counter < 20:
             chunk = p2p.request_an_obj_from_peer(ChainPrimaryProvide, peer, CHAIN_PRIMARY, ChainPrimaryRequest(block_locator=block_locator, chunk_size=size, chunk_n=n))
-            if chunk == None:
+            if chunk is None:
                 none_counter += 1
+                print('continuing', chunk)
                 continue
-            primary_chain.extend(chunk.blocks)
+            primary_chain.extend(chunk.hashes)
             break  # todo: this is temp, but will mean the loop terminates early; we'll still sync, though
             #if len(chunk) < size:
             #    break
@@ -85,13 +90,12 @@ def watch_peer_top_blocks_loop(chain: Chain, p2p: Network):
                 peers = p2p.all_peers()
             block_locator = chain.make_block_locator()
             results = []
+            print(peers)
             threads = [fire(add_primary_chain_to_results, args=(p, results, block_locator)) for p in peers]
             wait_for_all_threads_to_finish(threads)
-            counter = 0  # the counter ensures hashes added will be sought in the order submitted
             for hashes in results:
-                counter += 1
                 for n, block_hash in enumerate(hashes):
-                    chain.seek_block(n + counter * 1000000, block_hash)  # todo: maybe a better priority system than just enumeration
+                    chain.seek_block(n, block_hash)  # todo: maybe a better priority system than just enumeration
 
         nice_sleep(p2p, 30)  # we don't want to piss people off if this is too frequent
 

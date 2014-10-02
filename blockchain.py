@@ -20,11 +20,21 @@ class Chain:
         self.blocks_to_seek = PriorityQueue()  # format: (total_work, block_hash) - get early blocks first
 
 
+
     def _back_up_state(self):
         self.backup_state = deepcopy(self.state)
 
     def _restore_backed_up_state(self):
         self.state = self.backup_state
+
+    @property
+    def primary_chain(self):
+        t = self.head
+        primary_chain = []
+        while t != self.root:
+            primary_chain = [t] + primary_chain
+            t = t.linked_blocks[0]
+        return [t] + primary_chain  # root is not included in the above loop
 
     def seek_block(self, total_work, block_hash):
         if not self.has_block(block_hash):
@@ -37,10 +47,12 @@ class Chain:
         return self.block_index[block_hash]
 
     def add_blocks(self, blocks):
-        print([b.to_json() for b in blocks])
         # todo : design some better sorting logic.
         # we should check if orphan chains match up with what we've added, if so add the orphan chain.
         rejects = []
+        # todo: major bug - if blocks are added in the order [good, good, bad], say, and blocks 1 and 2 cause a reorg
+        # then when block 3 causes an exception the state will revert but the head is still on block 2, which doesn't
+        # match the state.
         self._back_up_state()
         try:
             for block in blocks:
@@ -75,7 +87,7 @@ class Chain:
         return None
 
     def reorganize_to(self, block):
-        print('reorg from %064x\nto         %064x\n' % (self.head.hash, block.hash))
+        print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, block.height))
         pivot = self.find_pivot(self.head, block)
         self.mass_unapply(Chain.order_from(pivot, self.head)[1:])
         self.mass_apply(Chain.order_from(pivot, block)[1:])
@@ -121,7 +133,7 @@ class Chain:
         i = 0
         c = 0
         while h - c >= 0:
-            locator.append(self.head.primary_chain[h - c])
+            locator.append(self.primary_chain[h - c].hash)
             c = 2**i
             i += 1
 
@@ -143,30 +155,14 @@ class Chain:
     '''
 
     @staticmethod
-    def _order_from_alpha(early_node, late_node, carry=None, pivot_check=True):
-        # TODO: may need to check this alg in boundary cases to ensure
-        carry = [] if carry is None else carry
-        if early_node == late_node:
-            return [late_node]
-        if late_node.is_root:
-            raise Exception("Root block encountered unexpectedly while ordering graph")
-        if pivot_check:
-            assert Chain.find_pivot(early_node, late_node) == early_node
+    def _order_from_alpha(early_node, late_node):
         path = []
-        for linked_block in late_node.linked_blocks:
-            path.extend(exclude_from(Chain._order_from_alpha(early_node, linked_block), carry + path))
-        return path + [late_node]
-
-    '''@staticmethod
-    def _order_from_beta(early_node, late_node, already_ordered=None):
-        already_ordered = set() if already_ordered is None else already_ordered
-        path = []
-        for linked_block in late_node.linked_blocks:
-            if linked_block not in already_ordered:
-                order = Graph._order_from_beta(early_node, linked_block, already_ordered)
-                path.extend(order)
-                already_ordered.union(set(order))
-        return path + [late_node]'''
+        while early_node != late_node:
+            if late_node.is_root:
+                raise Exception("Root block encountered unexpectedly while ordering graph")
+            path = [late_node] + path
+            late_node = late_node.linked_blocks[0]
+        return [early_node] + path
 
     @staticmethod
     def order_from(early_node: SimpleBlock, late_node: SimpleBlock):
@@ -192,7 +188,6 @@ class Chain:
 
     def load_from_db(self, db):
         index = db.get_latest_index()
-        print(index)
         while len(index) > 0:
             self.add_blocks(db.get_blocks(index[:500]))
             index = index[500:]

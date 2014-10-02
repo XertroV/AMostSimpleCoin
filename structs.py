@@ -120,15 +120,6 @@ class SimpleBlock(Encodium):
     # Properties
 
     @property
-    def primary_chain(self):
-        if self._primary_chain is None:
-            if len(self.links) == 0:
-                self._primary_chain = [self]
-            else:
-                self._primary_chain = self.linked_blocks[0].primary_chain + [self]
-        return self._primary_chain
-
-    @property
     def hash(self):
         if self._hash is None:
             self._hash = hash_block(self)
