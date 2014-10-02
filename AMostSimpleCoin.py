@@ -1,8 +1,8 @@
 from hashlib import sha256
 from copy import deepcopy
 from queue import PriorityQueue, Empty
-import sys.argv
-import time.time
+import sys
+import time
 
 from flask import request
 
@@ -40,8 +40,8 @@ set_message_handlers(chain, p2p)
 # Create root
 if "-create_root" in sys.argv:
     m = Miner(chain, p2p)
-    root = SimpleBlock(links=[], work_target=10**6, total_work=0, timestamp=time.time(), nonce=m._special_nonce)
-    m._start_mining(root)
+    root = SimpleBlock(links=[], work_target=10**6, total_work=0, timestamp=int(time.time()), nonce=m._special_nonce)
+    print(m._miner_this_block(root))
 
 # Go time!
 
