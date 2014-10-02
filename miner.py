@@ -9,7 +9,7 @@ from message_handlers import *
 
 class Miner:
 
-    def __init__(self, chain: Chain=None, p2p: Network=None, run_forever=False):
+    def __init__(self, chain: Chain=None, p2p: Network=None, run_forever=True):
         self._chain = chain
         self._special_nonce = 1234567890
         self._run_forever = run_forever
@@ -32,7 +32,6 @@ class Miner:
     def run(self, work_target=10**6):
         while True:
             self.start()
-            self._mining_thread.join()
 
     def start(self, work_target=10**6):
         candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce, work_target=work_target, total_work=self._chain.head.total_work + work_target)

@@ -49,11 +49,11 @@ if "-create_root" in sys.argv:
 # Go time!
 
 try:
-    if "-mine" in sys.argv:
-        miner.start(10**6)
     start_threads(chain, p2p)
+    fire(miner.run)
     p2p.run()
 finally:
+    miner.stop()
     p2p.shutdown()
     print('TERMINATING: DO NOT CLOSE')
     chain.dump_to_db(db)
