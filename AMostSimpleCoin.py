@@ -1,7 +1,8 @@
 from hashlib import sha256
 from copy import deepcopy
 from queue import PriorityQueue, Empty
-from sys import argv
+import sys.argv
+import time.time
 
 from flask import request
 
@@ -17,6 +18,8 @@ from blockchain import Chain
 from message_handlers import set_message_handlers
 from control_loops import start_threads
 from database import Database
+from miner import Miner
+
 
 # Create chain
 
@@ -32,7 +35,13 @@ port = 2281
 seeds = [('198.199.102.43', port-1), ('127.0.0.1', port)]
 p2p = Network(seeds=seeds, address=('0.0.0.0', port), debug=True)
 
-set_message_handlers(p2p, chain)
+set_message_handlers(chain, p2p)
+
+# Create root
+if "-create_root" in sys.argv:
+    m = Miner(chain, p2p)
+    root = SimpleBlock(links=[], work_target=10**6, total_work=0, timestamp=time.time(), nonce=m._special_nonce)
+    m._start_mining(root)
 
 # Go time!
 

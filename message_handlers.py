@@ -70,7 +70,7 @@ class ChainPrimaryProvide(Encodium):
     chunk_size = Integer8Bytes.Definition()
 
 
-def set_message_handlers(p2p: Network, chain: Chain):
+def set_message_handlers(chain: Chain, p2p: Network):
 
     @p2p.method(BlockAnnounce)
     def block_announce(announcement: BlockAnnounce):
