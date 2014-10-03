@@ -3,19 +3,29 @@ import traceback
 
 from structs import *
 from helpers import *
-from database import Database
+from database import Database, RedisDictionary, RedisSet
 
 # TODO : figure out best where to hook DB in
+TOP_BLOCK = 'top_block'
 
 class Chain:
-    def __init__(self, root: SimpleBlock):
+    def __init__(self, root: SimpleBlock, db: Database):
+        self._db = db
         self.root = root
-        self.head = self.root
+
         self.orphans = Orphanage()
-        self.all_nodes = {self.root}
+        self.all_node_hashes = RedisSet(db, 'all_nodes')
+        self.all_node_hashes.add(root.hash)
         self.state = State()
-        self.block_index = {self.root.hash: self.root}
-        #self.apply_to_state(self.root)
+        self.block_index = RedisDictionary(db, 'block_index', SimpleBlock)
+        self.block_index[self.root.hash] = self.root
+        self.block_heights = RedisDictionary(db, 'block_heights', int)
+        self.block_heights[self.root.hash] = 0
+        self.heights = RedisDictionary(db, 'heights', int)
+        self.heights[0] = self.root.hash
+        self.apply_to_state(self.root)
+
+        self.head = self._get_top_block()
 
         self.blocks_to_seek = PriorityQueue()  # format: (total_work, block_hash) - get early blocks first
 
@@ -31,17 +41,30 @@ class Chain:
     def primary_chain(self):
         t = self.head
         primary_chain = []
-        while t != self.root:
+        while not t.is_root:
             primary_chain = [t] + primary_chain
-            t = t.linked_blocks[0]
+            t = self.get_block(t.links[0])
         return [t] + primary_chain  # root is not included in the above loop
+
+    def _get_top_block(self):
+        tb_hash = self._db.get_kv(TOP_BLOCK, int)
+        if tb_hash is None:
+            self._set_top_block(self.root)
+            return self.root
+        return self.block_index[tb_hash]
+
+    def _set_top_block(self, top_block):
+        return self._db.set_kv(TOP_BLOCK, top_block.hash)
 
     def seek_block(self, total_work, block_hash):
         if not self.has_block(block_hash):
             self.blocks_to_seek.put((total_work, block_hash))
 
+    def height_of_block(self, block_hash):
+        return self.block_heights[block_hash]
+
     def has_block(self, block_hash):
-        return block_hash in self.block_index
+        return block_hash in self.all_node_hashes
 
     def get_block(self, block_hash):
         return self.block_index[block_hash]
@@ -74,24 +97,38 @@ class Chain:
         :param block: QuantaBlock instance
         :return: None on success, block if parent missing
         """
+        print(block.to_json())
         if self.has_block(block.hash): return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.has_block, block.links):
+            print('Rejecting block: don\'t have all links')
+            print(self.all_node_hashes.members())
             return block
-        block.set_linked_blocks([self.block_index[link] for link in block.links])
+        # success
+        self._update_metadata(block)
+        block.set_block_index(self.block_index)
         if self.better_than_head(block):
             self.reorganize_to(block)
-        self.all_nodes.add(block)
+        self.all_node_hashes.add(block.hash)
         self.block_index[block.hash] = block
         print("Chain._add_block - processed", block.hash)
         return None
 
+    def _set_height_metadata(self, block):
+        height = self.block_heights[block.links[0]] + 1
+        self.block_heights[block.hash] = height
+        self.heights[height] = block.hash
+
+    def _update_metadata(self, block):
+        self._set_height_metadata(block)
+
     def reorganize_to(self, block):
-        print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, block.height))
+        print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self.block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
-        self.mass_unapply(Chain.order_from(pivot, self.head)[1:])
-        self.mass_apply(Chain.order_from(pivot, block)[1:])
+        self.mass_unapply(self.order_from(pivot, self.head)[1:])
+        self.mass_apply(self.order_from(pivot, block)[1:])
         self.head = block
+        self._set_top_block(self.head)
 
     # Coin & State methods
 
@@ -129,7 +166,8 @@ class Chain:
     def make_block_locator(self):
         locator = []
 
-        h = self.head.height
+        h = self.block_heights[self.head.hash]
+        print(h, self.head.hash)
         i = 0
         c = 0
         while h - c >= 0:
@@ -141,32 +179,18 @@ class Chain:
 
     # Static Methods
 
-    '''
-    @staticmethod
-    def order_from(early_node, late_node, carry=None):
-        carry = [] if carry is None else carry
-        if early_node == late_node:
-            return [late_node]
-        if late_node.parent_hash == 0:
-            raise Exception('Root block encountered unexpectedly while ordering graph')
-        main_path = exclude_from(Graph.order_from(early_node, late_node.parent), carry)
-        aux_path = exclude_from(Graph.order_from(early_node, late_node.uncle), carry + main_path) if late_node.uncle is not None else []
-        return main_path + aux_path + [late_node]
-    '''
-
-    @staticmethod
-    def _order_from_alpha(early_node, late_node):
+    def _order_from_alpha(self, early_node, late_node):
         path = []
         while early_node != late_node:
             if late_node.is_root:
                 raise Exception("Root block encountered unexpectedly while ordering graph")
             path = [late_node] + path
-            late_node = late_node.linked_blocks[0]
+            print(late_node.to_json())
+            late_node = self.get_block(late_node.links[0])
         return [early_node] + path
 
-    @staticmethod
-    def order_from(early_node: SimpleBlock, late_node: SimpleBlock):
-        return Chain._order_from_alpha(early_node, late_node)
+    def order_from(self, early_node: SimpleBlock, late_node: SimpleBlock):
+        return self._order_from_alpha(early_node, late_node)
 
     @staticmethod
     def find_pivot(b1: SimpleBlock, b2: SimpleBlock):
@@ -174,21 +198,8 @@ class Chain:
         # the primary chain is constructed by taking the first link from a block, which is of the highest priority.
         while b1 != b2 and not b1.is_root and not b2.is_root:
             if b1.total_work >= b2.total_work:
-                b1 = b1.linked_blocks[0]
+                b1 = b1.block_index[0]
             else:
-                b2 = b2.linked_blocks[0]
+                b2 = b2.block_index[0]
         return b1 if b1 == b2 else None
-
-    def dump_to_db(self, db: Database):  # infrequent use intended
-        offset = db.create_new_index_of_chain(self)  # enumerates block hashes in order of execution
-        db.dump_chain(self)  # map of block_hash to block.to_json()
-        # todo: decide if a verification is needed
-        # db.verify_chain_at_index(self, offset)  # goes through and checks the above
-        db.purge(offset-1)  # remove the last copy - this is meant to be done infrequently
-
-    def load_from_db(self, db):
-        index = db.get_latest_index()
-        while len(index) > 0:
-            self.add_blocks(db.get_blocks(index[:500]))
-            index = index[500:]
 

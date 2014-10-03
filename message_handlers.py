@@ -91,7 +91,7 @@ def set_message_handlers(chain: Chain, p2p: Network):
     @p2p.method(InvRequest)
     def inv_request(request):
         # todo : this needs to be O(1), bloom filters?
-        return InvProvide(inv_list=[b.hash for b in chain.all_nodes])
+        return InvProvide(inv_list=[b.hash for b in chain.all_node_hashes])
 
     @p2p.method(ChainInfoRequest)
     def chain_info(request):

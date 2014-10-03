@@ -59,6 +59,11 @@ def zero_if_none(thing):
         return 0
     return thing
 
+def serialize_if_encodium(o):
+    if isinstance(o, Encodium):
+        return o.to_json()
+    return o
+
 # Crypto Helpers
 
 def valid_secp256k1_signature(x, y, msg, r, s):

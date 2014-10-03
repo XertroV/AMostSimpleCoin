@@ -21,18 +21,20 @@ from database import Database
 from miner import Miner
 
 
-# Create chain
-
-db = Database()
-
-root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437)
-chain = Chain(root_block)
-chain.load_from_db(db)
-
-# Initialize P2P
 
 port = int(sys.argv[sys.argv.index("-port") + 1]) if "-port" in sys.argv else 2281
 extra_seed = sys.argv[sys.argv.index("-seed") + 1].split(":") if "-seed" in sys.argv else ('198.199.102.43', port)
+db_num = int(sys.argv[sys.argv.index("-db") + 1] if "-db" in sys.argv else 0)
+
+
+# Create chain
+
+db = Database(db_num=db_num)
+
+root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437)
+chain = Chain(root_block, db)
+
+# Initialize P2P
 
 seeds = [(extra_seed[0], int(extra_seed[1]))]
 p2p = Network(seeds=seeds, address=('0.0.0.0', port), debug=True)
@@ -55,7 +57,6 @@ try:
     if "-mine" in sys.argv: fire(miner.run)
     p2p.run()
 finally:
+    print('TERMINATING: DO NOT CLOSE')
     miner.stop()
     p2p.shutdown()
-    print('TERMINATING: DO NOT CLOSE')
-    chain.dump_to_db(db)

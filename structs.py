@@ -91,12 +91,15 @@ class SimpleBlock(Encodium):
         self._primary_chain = None
         self._hash = None
         self._height = None
-        self.linked_blocks = None
+        self.block_index = None
         self.tx = None
         super().__init__(*args, **kwargs)
 
     def __hash__(self):
         return self.hash
+
+    def __gt__(self, other):
+        return self.total_work > other.total_work
 
     def check(s, changed_attributes):
         assert s.work_target > 100000  # this is somewhat implied through the below
@@ -105,17 +108,8 @@ class SimpleBlock(Encodium):
 
     # Graph
 
-    def set_linked_blocks(self, blocks):
-        # TODO: The asserts are here to sanity check for now, can maybe one day be removed
-        assert all_true(lambda xs : xs[0].hash == xs[1], zip(blocks, self.links))
-
-        sigma_diffs = [b.sigma_diff for b in blocks]
-        assert all_true(lambda ys : ys[0] >= ys[1], zip(sigma_diffs[:-1], sigma_diffs[1:]))
-
-        # todo: temporary: ensure only one linked block. see check() too
-        assert len(blocks) <= 1
-
-        self.linked_blocks = blocks
+    def set_block_index(self, block_index):
+        self.block_index = block_index
 
     # Properties
 
@@ -140,15 +134,6 @@ class SimpleBlock(Encodium):
     @property
     def is_root(self):
         return len(self.links) == 0
-
-    @property
-    def height(self):
-        if self._height is None:
-            if self.is_root:
-                self._height = 0
-            else:
-                self._height = self.linked_blocks[0].height + 1
-        return self._height
 
 
 # State
@@ -190,7 +175,8 @@ class Orphanage:
         self._removed.add(block)
 
     def _put_block(self, block: SimpleBlock):
-        self._priority_queue.put((block.sigma_diff, block))
+        print(block.to_json())
+        self._priority_queue.put((block.total_work, block))
 
     def put(self, block: SimpleBlock):
         self._put_block(block)
