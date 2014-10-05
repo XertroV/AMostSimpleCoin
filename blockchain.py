@@ -124,8 +124,9 @@ class Chain:
     def reorganize_to(self, block):
         print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self.block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
-        self.mass_unapply(self.order_from(pivot, self.head)[1:])
-        self.mass_apply(self.order_from(pivot, block)[1:])
+        print(pivot.to_json())
+        self.mass_unapply(self.order_from(pivot, self.head))
+        self.mass_apply(self.order_from(pivot, block))
         self.head = block
         self._set_top_block(self.head)
 
@@ -190,14 +191,11 @@ class Chain:
     def order_from(self, early_node: SimpleBlock, late_node: SimpleBlock):
         return self._order_from_alpha(early_node, late_node)
 
-    @staticmethod
-    def find_pivot(b1: SimpleBlock, b2: SimpleBlock):
-        # conjecture: rewinding back to the lowest common ancestor in the primary chain is sufficient (and necessary?)
-        # the primary chain is constructed by taking the first link from a block, which is of the highest priority.
-        while b1 != b2 and not b1.is_root and not b2.is_root:
+    def find_pivot(self, b1: SimpleBlock, b2: SimpleBlock):
+        while b1.hash != b2.hash:
             if b1.total_work >= b2.total_work:
-                b1 = b1.block_index[0]
+                b1 = self.get_block(b1.links[0])
             else:
-                b2 = b2.block_index[0]
+                b2 = self.get_block(b2.links[0])
         return b1 if b1 == b2 else None
 
