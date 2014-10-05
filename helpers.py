@@ -14,7 +14,6 @@ MAX_8_BYTE_INT = 256 ** 8 - 1
 
 FEE_CONSTANT = 1000  # 8000000  # Arbitrary-ish
 
-
 # Functions
 
 def is_32_bytes(i):
@@ -25,6 +24,10 @@ def is_4_bytes(i):
 
 def all_true(f, l):
     return False not in map(f, l)
+
+def assert_equal(a, b):
+    if a != b:
+        raise AssertionError('%s not equal to %s' % (a, b))
 
 def global_hash(msg: bytes):
     return int.from_bytes(sha256(msg).digest(), 'big')
@@ -70,6 +73,8 @@ def fire(target, args=(), kwargs={}):
     return t
 
 
+
+
 def nice_sleep(object, seconds):
     '''
     This sleep is nice because it pays attention to an object's ._shutdown variable.
@@ -87,11 +92,13 @@ def nice_sleep(object, seconds):
 def valid_secp256k1_signature(x, y, msg, r, s):
     return ecdsa.verify(ecdsa.generator_secp256k1, (x, y), global_hash(msg), (r, s))
 
+PUB_KEY_FOR_KNOWN_SE = ecdsa.public_pair_for_secret_exponent(ecdsa.generator_secp256k1, 1)
+PUB_KEY_X_FOR_KNOWN_SE = PUB_KEY_FOR_KNOWN_SE[0]
 
 # Network-y functions
 
 def storage_fee(block):
-    return len(block.to_json()) * FEE_CONSTANT
+    return (len(block.to_json()) - len(str(block.state_hash))) // 32 * FEE_CONSTANT
 
 
 

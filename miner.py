@@ -33,7 +33,7 @@ class Miner:
         nice_sleep(self._p2p, 3)  # warm up
         while not self._stop and not self._p2p.is_shutdown:
             self.start()
-            nice_sleep(self._p2p, 60)
+            nice_sleep(self._p2p, 6)
 
     def start(self, work_target=10**6):
         candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce, work_target=work_target, total_work=self._chain.head.total_work + work_target)
@@ -44,7 +44,12 @@ class Miner:
 
     def _start_mining(self, candidate):
 
+        # todo: edge case where str(nonce) gains characters, altering the storage fee, causing the state_hash to change...
+
+        while candidate.state_hash != self._chain.get_next_state_hash(candidate):
+            candidate.state_hash = self._chain.get_next_state_hash(candidate)
         candidate = self.mine_this_block(candidate)
+
         if self._chain: self._chain.add_blocks([candidate])
         if self._p2p: print('Announcing Block', self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate)))
         self._running = False
@@ -56,7 +61,7 @@ class Miner:
         def serialized_block_from_nonce(n):
             return m1 + str(n).encode() + m2
 
-        nonce = 0
+        nonce = self._special_nonce  # set large to avoid edge case presented
         work_target = candidate.work_target
         hash_target = work_target_to_hash_target(work_target)
         self._running = True

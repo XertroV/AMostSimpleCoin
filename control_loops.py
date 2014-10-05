@@ -10,7 +10,7 @@ def watch_blocks_to_seek(chain: Chain, p2p: Network):
     nice_sleep(p2p, 3)  # warm up
 
     check_again = PriorityQueue()
-    currently_seeking = set()
+    chain.currently_seeking = set()
 
     while not p2p.is_shutdown:
         try:
@@ -19,14 +19,14 @@ def watch_blocks_to_seek(chain: Chain, p2p: Network):
             continue
         print("seeking blocks", seek_blocks)
         try:
-            to_seek = [h for _, h in seek_blocks if h not in currently_seeking]
+            to_seek = [h for _, h in seek_blocks if h not in chain.currently_seeking]
             if len(to_seek) > 0:
                 p2p.farm_message(BLOCK_REQUEST, BlockRequest(hashes=to_seek))
         except Exception as e:
             raise
 
         for _, h in seek_blocks:
-            currently_seeking.add(h)
+            chain.currently_seeking.add(h)
 
         timestamp = time.time()
 
@@ -38,7 +38,7 @@ def watch_blocks_to_seek(chain: Chain, p2p: Network):
                     if checking[1] in seek_blocks:
                         seek_blocks.remove(checking[1])
                 else:
-                    currently_seeking.remove(checking[1][1])
+                    chain.currently_seeking.remove(checking[1][1])
                 checking = check_again.get(block=False)
             check_again.put(checking)  # put the last one back because it's not ready yet
         except Empty:

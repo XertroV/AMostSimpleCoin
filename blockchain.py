@@ -32,10 +32,10 @@ class Chain:
 
 
     def _back_up_state(self):
-        self.backup_state = deepcopy(self.state)
+        self._backup_state = deepcopy(self.state)
 
     def _restore_backed_up_state(self):
-        self.state = self.backup_state
+        self.state = self._backup_state
 
     @property
     def primary_chain(self):
@@ -97,7 +97,7 @@ class Chain:
         :param block: QuantaBlock instance
         :return: None on success, block if parent missing
         """
-        print('_add_block', block.to_json())
+        print('_add_block', block.hash)
         if self.has_block(block.hash): return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.has_block, block.links):
@@ -111,6 +111,9 @@ class Chain:
         self.all_node_hashes.add(block.hash)
         self.block_index[block.hash] = block
         print("Chain._add_block - processed", block.hash)
+        orphaned_children = self.orphans.children_of(block.hash)
+        if orphaned_children is not None:
+            self.add_blocks(list(orphaned_children))
         return None
 
     def _set_height_metadata(self, block):
@@ -124,17 +127,28 @@ class Chain:
     def reorganize_to(self, block):
         print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self.block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
-        print(pivot.to_json())
-        self.mass_unapply(self.order_from(pivot, self.head))
-        self.mass_apply(self.order_from(pivot, block))
+        self.mass_unapply(self.order_from(pivot, self.head)[1:])
+        self.mass_apply(self.order_from(pivot, block)[1:])
+        print('Current State', self.state.full_state())
         self.head = block
         self._set_top_block(self.head)
 
     # Coin & State methods
 
+    def get_next_state_hash(self, block):
+        self._back_up_state()
+        self._modify_state(block, 1)
+        state_hash = self.state.hash
+        self._restore_backed_up_state()
+        return state_hash
+
+
     def valid_for_state(self, block):
-        if block.tx == None: return True
-        return self.state.get(block.tx.signature.pub_x) >= block.tx.value
+        state_hash = self.get_next_state_hash(block)
+        assert_equal(block.state_hash, state_hash)
+        if block.tx is not None:
+            assert self.state.get(block.tx.signature.pub_x) >= block.tx.total
+        return True
 
     def apply_to_state(self, block):
         assert self.valid_for_state(block)
@@ -145,7 +159,6 @@ class Chain:
 
     def _modify_state(self, block, direction):
         assert direction in [-1, 1]
-        return
         if block.tx is not None:
             self.state.modify_balance(block.tx.recipient, direction * block.tx.value)
             self.state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)

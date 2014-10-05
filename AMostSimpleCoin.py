@@ -28,7 +28,7 @@ log_filename = sys.argv[sys.argv.index("-log") + 1] if "-log" in sys.argv else "
 
 db = Database(db_num=db_num)
 
-root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437)
+root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437, coinbase=PUB_KEY_X_FOR_KNOWN_SE, state_hash=47941547378636015850744045282709669886060775903775382392759025879383704321130)
 chain = Chain(root_block, db)
 
 # Initialize P2P
