@@ -1,6 +1,6 @@
 import threading, time
 
-from SSTT import Network
+from WSSTT import Network
 
 from blockchain import Chain
 from structs import SimpleBlock
@@ -31,7 +31,7 @@ class Miner:
 
     def run(self, work_target=10**6):
         nice_sleep(self._p2p, 3)  # warm up
-        while not self._stop:
+        while not self._stop and not self._p2p.is_shutdown:
             self.start()
             nice_sleep(self._p2p, 5)
 
@@ -46,7 +46,7 @@ class Miner:
 
         candidate = self.mine_this_block(candidate)
         if self._chain: self._chain.add_blocks([candidate])
-        if self._p2p: self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate))
+        if self._p2p: print('Announcing Block', self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate)))
         self._running = False
 
     def mine_this_block(self, candidate: SimpleBlock):
@@ -60,7 +60,7 @@ class Miner:
         work_target = candidate.work_target
         hash_target = work_target_to_hash_target(work_target)
         self._running = True
-        while not self._stop:
+        while not self._stop and not self._p2p.is_shutdown:
             h = global_hash(serialized_block_from_nonce(nonce))
             if h < hash_target:
                 candidate.nonce = nonce
@@ -69,4 +69,14 @@ class Miner:
             nonce += 1
             # if nonce % 100000 == 0: print(nonce)
 
+        if self._stop or self._p2p.is_shutdown:
+            return
         return candidate
+
+
+
+
+
+
+
+    

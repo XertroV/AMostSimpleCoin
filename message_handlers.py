@@ -1,5 +1,4 @@
-
-from SSTT import Network
+from WSSTT import Network
 
 from structs import *
 from blockchain import Chain
@@ -29,11 +28,15 @@ INV_REQUEST (-> [h: Hash, ..]) Return hashes of items in inventory.
 BLOCK_ANNOUNCE (b: Block ->) Push a block to a node.
 """
 
-BLOCK_ANNOUNCE = 'block_announce'
-CHAIN_INFO = 'chain_info'
-CHAIN_PRIMARY = 'chain_primary'
-BLOCK_REQUEST = 'block_request'
-INV_REQUEST = 'inv_request'
+BLOCK_ANNOUNCE          = 'block_announce'
+CHAIN_INFO              = 'chain_info'
+CHAIN_INFO_PROVIDE      = 'chain_info_provide'
+CHAIN_PRIMARY           = 'chain_primary'
+CHAIN_PRIMARY_PROVIDE   = 'chain_primary_provide'
+BLOCK_REQUEST           = 'block_request'
+BLOCK_PROVIDE           = 'block_provide'
+INV_REQUEST             = 'inv_request'
+INV_PROVIDE             = 'inv_provide'
 
 # Message Containers
 
@@ -72,33 +75,53 @@ class ChainPrimaryProvide(Encodium):
 
 def set_message_handlers(chain: Chain, p2p: Network):
 
-    @p2p.method(BlockAnnounce, BLOCK_ANNOUNCE)
-    def block_announce(announcement: BlockAnnounce):
+    @p2p.method(BlockAnnounce, BLOCK_ANNOUNCE, CHAIN_INFO)
+    def block_announce(peer, announcement: BlockAnnounce):
         print('Got Block Ann')
         if not chain.has_block(announcement.block.hash):
             print ('Adding block')
             chain.add_blocks([announcement.block])
             p2p.broadcast(BLOCK_ANNOUNCE, announcement)
-            return "True"
-        else:
-            return "False"
 
-    @p2p.method(BlockRequest)
-    def block_request(request):
-        hashes = request.hashes[:500]  # return at most 500 blocks
+            if not chain.has_block(announcement.block.links[0]):
+                return ChainInfoRequest()
+
+    @p2p.method(BlockRequest, BLOCK_REQUEST, BLOCK_PROVIDE)
+    def block_request(peer, request):
+        hashes = block_request.hashes[:500]  # return at most 500 blocks
         return BlockProvide(blocks=[chain.get_block(h) for h in hashes])
 
-    @p2p.method(InvRequest)
-    def inv_request(request):
+    @p2p.method(BlockProvide, BLOCK_PROVIDE)
+    def block_provide(peer, provided):
+        chain.add_blocks(provided.blocks)
+
+    @p2p.method(InvRequest, INV_REQUEST, INV_PROVIDE)
+    def inv_request(peer, request):
         # todo : this needs to be O(1), bloom filters?
         return InvProvide(inv_list=[b.hash for b in chain.all_node_hashes])
 
-    @p2p.method(ChainInfoRequest)
-    def chain_info(request):
-        return ChainInfoProvide(top_block=chain.head.hash, total_work=chain.head.sigma_diff)
+    @p2p.method(InvProvide, INV_PROVIDE, BLOCK_REQUEST)
+    def inv_provide(peer, provided):
+        to_request = []
+        for h in provided.inv_list:
+            if not chain.has_block(h):
+                to_request.append(h)
+        if len(to_request) > 0:
+            return BlockRequest(hashes=to_request)
 
-    @p2p.method(ChainPrimaryRequest, CHAIN_PRIMARY)
-    def chain_primary(request):
+    @p2p.method(ChainInfoRequest, CHAIN_INFO, CHAIN_INFO_PROVIDE)
+    def chain_info(peer, request):
+        return ChainInfoProvide(top_block=chain.head.hash, total_work=chain.head.total_work)
+
+    @p2p.method(ChainInfoProvide, CHAIN_INFO_PROVIDE, CHAIN_PRIMARY)
+    def chain_info_provide(peer, provided):
+        if not chain.has_block(chain_info.top_block):
+            size = 10000
+            n = 0
+            return ChainPrimaryRequest(block_locator=chain.make_block_locator(), chunk_size=size, chunk_n=n)
+
+    @p2p.method(ChainPrimaryRequest, CHAIN_PRIMARY, CHAIN_PRIMARY_PROVIDE)
+    def chain_primary(peer, request):
         start = request.chunk_size * request.chunk_n
 
         lca = None
@@ -115,3 +138,14 @@ def set_message_handlers(chain: Chain, p2p: Network):
             hashes=[b.hash for b in chain.order_from(chain.get_block(lca), chain.head)[max(0, start - 10):start + request.chunk_size]],
             chunk_n=request.chunk_n,
             chunk_size=request.chunk_size)
+
+    @p2p.method(ChainPrimaryProvide, CHAIN_PRIMARY_PROVIDE, CHAIN_PRIMARY)
+    def chain_primary_provide(peer, provided):
+        size = provided.chunk_size
+        n = provided.chunk_n
+
+        for i, h in enumerate(provided.hashes):
+            chain.seek_block(size * n + i, h)
+
+        if len(provided.hashes) >= size:
+            return ChainPrimaryRequest(block_locator=chain.make_block_locator(), chunk_size=size, chunk_n=n+1)

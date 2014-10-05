@@ -4,13 +4,10 @@ from queue import PriorityQueue, Empty
 import sys
 import time
 
-from flask import request
-
 import pycoin.ecdsa as ecdsa
 from encodium import *
-from SSTT import Network
-from SSTT.utils import fire, nice_sleep
-from SSTT.structs import Peer
+from WSSTT import Network
+from WSSTT.structs import Peer
 
 from helpers import *
 from structs import *

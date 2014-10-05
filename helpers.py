@@ -1,11 +1,11 @@
 from hashlib import sha256
 from queue import PriorityQueue, Empty
+import threading
+import time
 
 import pycoin.ecdsa as ecdsa
 
 from encodium import Encodium
-
-from SSTT.utils import fire, nice_sleep
 
 # Constants
 
@@ -50,10 +50,6 @@ def get_n_from_pq_and_block(limit: int, pq: PriorityQueue, timeout=None):
         pass
     return return_list
 
-def wait_for_all_threads_to_finish(threads):
-    for t in threads:
-        t.join()
-
 def zero_if_none(thing):
     if thing is None:
         return 0
@@ -63,6 +59,28 @@ def serialize_if_encodium(o):
     if isinstance(o, Encodium):
         return o.to_json()
     return o
+
+def wait_for_all_threads_to_finish(threads):
+    for t in threads:
+        t.join()
+
+def fire(target, args=(), kwargs={}):
+    t = threading.Thread(target=target, args=args, kwargs=kwargs)
+    t.start()
+    return t
+
+
+def nice_sleep(object, seconds):
+    '''
+    This sleep is nice because it pays attention to an object's ._shutdown variable.
+    :param object: some object with a _shutdown variable
+    :param seconds: seconds in float, int, w/e
+    :return: none
+    '''
+    for i in range(int(seconds * 10)):
+        time.sleep(0.1)
+        if object.is_shutdown:
+            break
 
 # Crypto Helpers
 
