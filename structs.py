@@ -175,7 +175,7 @@ class Orphanage:
         self._removed.add(block)
 
     def _put_block(self, block: SimpleBlock):
-        print(block.to_json())
+        print('Orphanage, put block', block.to_json())
         self._priority_queue.put((block.total_work, block))
 
     def put(self, block: SimpleBlock):

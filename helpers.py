@@ -45,7 +45,7 @@ def get_n_from_pq_and_block(limit: int, pq: PriorityQueue, timeout=None):
     return_list = [pq.get(block=True, timeout=timeout)]
     try:
         for i in range(limit - 1):
-            return_list.append(pq.get(block=False))
+            return_list.append(pq.get(block=True, timeout=timeout))
     except Empty:
         pass
     return return_list

@@ -1,13 +1,14 @@
 from hashlib import sha256
 from copy import deepcopy
 from queue import PriorityQueue, Empty
-import sys
+import sys, logging
 import time
 
 import pycoin.ecdsa as ecdsa
 from encodium import *
 from WSSTT import Network
 from WSSTT.structs import Peer
+from WSSTT.utils import logger
 
 from helpers import *
 from structs import *
@@ -18,11 +19,10 @@ from database import Database
 from miner import Miner
 
 
-
 port = int(sys.argv[sys.argv.index("-port") + 1]) if "-port" in sys.argv else 2281
 extra_seed = sys.argv[sys.argv.index("-seed") + 1].split(":") if "-seed" in sys.argv else ('198.199.102.43', port)
 db_num = int(sys.argv[sys.argv.index("-db") + 1] if "-db" in sys.argv else 0)
-
+log_filename = sys.argv[sys.argv.index("-log") + 1] if "-log" in sys.argv else "AMSC.log"
 
 # Create chain
 
@@ -41,6 +41,8 @@ set_message_handlers(chain, p2p)
 # inbuilt miner
 
 miner = Miner(chain, p2p)
+
+logging.basicConfig(filename=log_filename, level=logging.DEBUG)
 
 # Create root
 if "-create_root" in sys.argv:

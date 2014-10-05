@@ -6,11 +6,11 @@ from WSSTT.structs import Peer
 
 # Chain crawler thing
 
-@asyncio.coroutine
 def watch_blocks_to_seek(chain: Chain, p2p: Network):
-    nice_sleep(p2p, 3) # warm up
+    nice_sleep(p2p, 3)  # warm up
 
     check_again = PriorityQueue()
+    currently_seeking = set()
 
     while not p2p.is_shutdown:
         try:
@@ -19,23 +19,33 @@ def watch_blocks_to_seek(chain: Chain, p2p: Network):
             continue
         print("seeking blocks", seek_blocks)
         try:
-            p2p.farm_message(BLOCK_REQUEST, BlockRequest(hashes=[h for _, h in seek_blocks]))
+            to_seek = [h for _, h in seek_blocks if h not in currently_seeking]
+            if len(to_seek) > 0:
+                p2p.farm_message(BLOCK_REQUEST, BlockRequest(hashes=to_seek))
         except Exception as e:
             raise
 
+        for _, h in seek_blocks:
+            currently_seeking.add(h)
+
         timestamp = time.time()
-        for hash in seek_blocks:
-            check_again.put((timestamp, hash))
 
         try:
-            checking = (t, (n, h)) = check_again.get()
+            checking = (t, n_h) = check_again.get(block=False)
             while timestamp - checking[0] > 10:
                 if not chain.has_block(checking[1][1]):
                     chain.seek_block(*checking[1])
-                checking = check_again.get()
+                    if checking[1] in seek_blocks:
+                        seek_blocks.remove(checking[1])
+                else:
+                    currently_seeking.remove(checking[1][1])
+                checking = check_again.get(block=False)
             check_again.put(checking)  # put the last one back because it's not ready yet
         except Empty:
             pass
+
+        for hash in seek_blocks:
+            check_again.put((timestamp, hash))
 
 
 

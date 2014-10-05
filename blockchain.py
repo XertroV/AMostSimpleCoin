@@ -56,9 +56,9 @@ class Chain:
     def _set_top_block(self, top_block):
         return self._db.set_kv(TOP_BLOCK, top_block.hash)
 
-    def seek_block(self, total_work, block_hash):
+    def seek_block(self, approx_height, block_hash):
         if not self.has_block(block_hash):
-            self.blocks_to_seek.put((total_work, block_hash))
+            self.blocks_to_seek.put((approx_height, block_hash))
 
     def height_of_block(self, block_hash):
         return self.block_heights[block_hash]
@@ -97,12 +97,11 @@ class Chain:
         :param block: QuantaBlock instance
         :return: None on success, block if parent missing
         """
-        print(block.to_json())
+        print('_add_block', block.to_json())
         if self.has_block(block.hash): return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.has_block, block.links):
             print('Rejecting block: don\'t have all links')
-            print(self.all_node_hashes.members())
             return block
         # success
         self._update_metadata(block)
@@ -185,7 +184,6 @@ class Chain:
             if late_node.is_root:
                 raise Exception("Root block encountered unexpectedly while ordering graph")
             path = [late_node] + path
-            print(late_node.to_json())
             late_node = self.get_block(late_node.links[0])
         return [early_node] + path
 
