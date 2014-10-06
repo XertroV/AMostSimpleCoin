@@ -46,7 +46,11 @@ _mod_balance = """
     for i=1, n do
         new_val = get_balance("{path}", KEYS[i]) + ARGV[i]
         assert(new_val >= 0, "Cannot allow negative balance")
-        redis.call("HSET", "{path}", KEYS[i], new_val)
+        if (new_val > 0) then
+            redis.call("HSET", "{path}", KEYS[i], new_val)
+        else
+            redis.call("HDEL", "{path}", KEYS[i])
+        end
     end
     """
 

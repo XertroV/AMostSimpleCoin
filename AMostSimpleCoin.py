@@ -62,6 +62,8 @@ try:
     start_threads(chain, p2p)
     if "-mine" in sys.argv: fire(miner.run)
     p2p.run()
+except KeyboardInterrupt:
+    pass
 finally:
     print('TERMINATING: DO NOT CLOSE')
     miner.stop()

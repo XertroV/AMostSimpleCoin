@@ -61,6 +61,10 @@ class _RedisObject:
         self._r = db.redis
         self._type = value_type
 
+    def reset(self):
+        return self._r.delete(self._path)
+
+
 
 class RedisFlag(_RedisObject):
 
@@ -78,7 +82,27 @@ class RedisFlag(_RedisObject):
 
 
 class RedisList(_RedisObject):
-    pass
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            if item.step != 1:
+                raise NotImplemented("Steps in slices is not implemented for RedisList")
+            return self._r.lrange(self._path, item.start, item.stop)
+
+    def __setitem__(self, key, value):
+        return self._r.lset(self._path, key, serialize_if_encodium(value))
+
+    def prepend(self, *values):
+        return self._r.lpush(self._path, *values)
+
+    def append(self, *values):
+        return self._r.rpush(self._path, *values)
+
+    def lpop(self):
+        return self._r.lpop(self._path)
+
+    def rpop(self):
+        return self._r.rpop(self._path)
 
 
 class RedisSet(_RedisObject):

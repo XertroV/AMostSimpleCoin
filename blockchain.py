@@ -95,8 +95,10 @@ class Chain:
         # match the state.
         some_path = str(random.randint(1000,1000000))
         self._back_up_state(some_path)
+
         total_works = [(b.total_work, b) for b in blocks]
         total_works.sort()
+
         try:
             for tw, block in total_works:
                 r = self._add_block(block)
@@ -111,6 +113,7 @@ class Chain:
         except Exception as e:
             self._restore_backed_up_state(some_path)
             traceback.print_exc()
+            print('EXCEPTION CAPTURED WHILE ADDING BLOCK')
 
     def _add_block(self, block: SimpleBlock):
         """
@@ -123,6 +126,7 @@ class Chain:
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.has_block, block.links):
             print('Rejecting block: don\'t have all links')
+            # don't just look for children, get a primary chain
             self.seek_blocks(block.links)
             return block
 
@@ -151,10 +155,11 @@ class Chain:
     def reorganize_to(self, block):
         print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self.block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
-        self.mass_unapply(self.order_from(pivot, self.head)[1:])
+        self.mass_unapply(self.order_from(pivot, self.head))
         print('COINBASE _re_org_', block.coinbase)
-        self.mass_apply(self.order_from(pivot, block)[1:])
-        print('Current State', self.state.full_state())
+        self.mass_apply(self.order_from(pivot, block))
+        print('Current State')
+        pp(self.state.full_state())
         self.head = block
         self._set_top_block(self.head)
 
@@ -166,21 +171,15 @@ class Chain:
         return state_hash
 
     def _get_next_state_hash_not_threadsafe(self, block):
-        print("get_next_state_hash start")
-        pp(self.state.full_state())
         temp_path = str(random.randint(1000,1000000))
         self._back_up_state(temp_path)
         self._modify_state(block, 1)
         state_hash = self.state.hash
         self._restore_backed_up_state(temp_path)
-        print("get_next_state_hash done")
-        pp(self.state.full_state())
         return state_hash
 
     def valid_for_state(self, block):
         state_hash = self._get_next_state_hash_not_threadsafe(block)
-        pp(self.state.full_state())
-        pp(block.to_json())
         assert_equal(block.state_hash, state_hash)
         if block.tx is not None:
             assert self.state.get(block.tx.signature.pub_x) >= block.tx.total
@@ -191,7 +190,6 @@ class Chain:
             print('COINBASE _aply_st', block.coinbase)
             assert self.valid_for_state(block)
             self._modify_state(block, 1)
-            pp(self.state.full_state())
 
     def unapply_to_state(self, block):
         self._modify_state(block, -1)
@@ -203,6 +201,7 @@ class Chain:
             self.state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)
         self.state.modify_balance(block.coinbase, direction * block.coins_generated)
         print('Coinbase balance mod:', block.coinbase)
+        pp(self.state.full_state())
 
     def mass_unapply(self, path):
         for block in path[::-1]:
@@ -236,13 +235,18 @@ class Chain:
         path = []
         print(early_node.hash)
         while early_node.hash != late_node.hash:
-            if late_node.is_root:
-                raise Exception("Root block encountered unexpectedly while ordering graph")
             path = [late_node] + path
+            if late_node.is_root:
+                if early_node.is_root:
+                    return path
+                raise Exception("Root block encountered unexpectedly while ordering graph")
             late_node = self.get_block(late_node.links[0])
             #print('new_late_node')
             #print(late_node.hash)
-        return [early_node] + path
+        return path
+
+    def _order_from_beta(self, early_node, late_node):
+        pass
 
     def order_from(self, early_node: SimpleBlock, late_node: SimpleBlock):
         return self._order_from_alpha(early_node, late_node)
