@@ -1,20 +1,24 @@
 from copy import deepcopy
 import traceback
+import asyncio
+
+from WSSTT import Network
 
 from structs import *
 from helpers import *
+from seeker import Seeker
 from database import Database, RedisFlag, RedisHashMap, RedisSet, State
 
 # TODO : figure out best where to hook DB in
 TOP_BLOCK = 'top_block'
 
 class Chain:
-    def __init__(self, root: SimpleBlock, db: Database):
+    def __init__(self, root: SimpleBlock, db: Database, p2p: Network):
         self._db = db
+        self._p2p = p2p
         self.root = root
 
         self.state = State(self._db)
-        self._backup_path = "backup_state"
 
         self.orphans = Orphanage()
         self.all_node_hashes = RedisSet(db, 'all_nodes')
@@ -25,7 +29,8 @@ class Chain:
 
         self.head = self._get_top_block()
 
-        self.blocks_to_seek = PriorityQueue()  # format: (total_work, block_hash) - get early blocks first
+        self.seeker = Seeker(self, self._p2p)  # format: (total_work, block_hash) - get early blocks first
+        self.currently_seeking = set()
 
         if not self._initialized.is_true:
             self.first_initialize()
@@ -40,10 +45,10 @@ class Chain:
         self.apply_to_state(self.root)
 
     def _back_up_state(self):
-        self.state.backup_to(self._backup_path)
+        self.state.backup()
 
     def _restore_backed_up_state(self):
-        self.state.restore_backup_from(self._backup_path)
+        self.state.restore_backup()
 
     @property
     def primary_chain(self):
@@ -64,9 +69,13 @@ class Chain:
     def _set_top_block(self, top_block):
         return self._db.set_kv(TOP_BLOCK, top_block.hash)
 
-    def seek_block(self, approx_height, block_hash):
-        if not self.has_block(block_hash):
-            self.blocks_to_seek.put((approx_height, block_hash))
+    def seek_blocks(self, *block_hashes):
+        s = set()
+        for block_hash in block_hashes:
+            if not self.has_block(block_hash) and block_hash not in self.currently_seeking:
+                print('seeking', block_hash)
+                s.add(block_hash)
+        self.seeker.put(*s)
 
     def height_of_block(self, block_hash):
         return self.block_heights[block_hash]
@@ -85,8 +94,10 @@ class Chain:
         # then when block 3 causes an exception the state will revert but the head is still on block 2, which doesn't
         # match the state.
         self._back_up_state()
+        total_works = [(b.total_work, b) for b in blocks]
+        total_works.sort()
         try:
-            for block in blocks:
+            for tw, block in total_works:
                 r = self._add_block(block)
                 if r is not None:
                     rejects.append(r)
@@ -110,8 +121,10 @@ class Chain:
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.has_block, block.links):
             print('Rejecting block: don\'t have all links')
+            self.seek_blocks(*block.links)
             return block
-        # success
+
+        # success, lets add it
         self._update_metadata(block)
         block.set_block_index(self.block_index)
         if self.better_than_head(block):
@@ -144,24 +157,30 @@ class Chain:
     # Coin & State methods
 
     def get_next_state_hash(self, block):
+        with self.state.lock:
+            state_hash = self._get_next_state_hash_not_threadsafe(block)
+        return state_hash
+
+    def _get_next_state_hash_not_threadsafe(self, block):
         self._back_up_state()
         self._modify_state(block, 1)
         state_hash = self.state.hash
         self._restore_backed_up_state()
         return state_hash
 
-
     def valid_for_state(self, block):
-        state_hash = self.get_next_state_hash(block)
+        state_hash = self._get_next_state_hash_not_threadsafe(block)
         pp(self.state.full_state())
+        pp(block.to_json())
         assert_equal(block.state_hash, state_hash)
         if block.tx is not None:
             assert self.state.get(block.tx.signature.pub_x) >= block.tx.total
         return True
 
     def apply_to_state(self, block):
-        assert self.valid_for_state(block)
-        self._modify_state(block, 1)
+        with self.state.lock:
+            assert self.valid_for_state(block)
+            self._modify_state(block, 1)
 
     def unapply_to_state(self, block):
         self._modify_state(block, -1)
@@ -172,6 +191,7 @@ class Chain:
             self.state.modify_balance(block.tx.recipient, direction * block.tx.value)
             self.state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)
         self.state.modify_balance(block.coinbase, direction * block.coins_generated)
+        print('Coinbase balance mod:', block.coinbase)
 
     def mass_unapply(self, path):
         for block in path[::-1]:
@@ -201,11 +221,14 @@ class Chain:
 
     def _order_from_alpha(self, early_node, late_node):
         path = []
-        while early_node != late_node:
+        print(early_node.hash)
+        while early_node.hash != late_node.hash:
             if late_node.is_root:
                 raise Exception("Root block encountered unexpectedly while ordering graph")
             path = [late_node] + path
             late_node = self.get_block(late_node.links[0])
+            #print('new_late_node')
+            #print(late_node.hash)
         return [early_node] + path
 
     def order_from(self, early_node: SimpleBlock, late_node: SimpleBlock):

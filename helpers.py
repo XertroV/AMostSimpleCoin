@@ -1,5 +1,6 @@
 from hashlib import sha256
-from queue import PriorityQueue, Empty
+from queue import Empty
+from asyncio import PriorityQueue
 import threading
 import time, pprint
 
@@ -44,15 +45,6 @@ def work_target_to_hash_target(work_target):
 
 def exclude_from(a, b):  # operates on paths
     return [i for i in a if i not in set(b)]
-
-def get_n_from_pq_and_block(limit: int, pq: PriorityQueue, timeout=None):
-    return_list = [pq.get(block=True, timeout=timeout)]
-    try:
-        for i in range(limit - 1):
-            return_list.append(pq.get(block=True, timeout=timeout))
-    except Empty:
-        pass
-    return return_list
 
 def zero_if_none(thing):
     if thing is None:

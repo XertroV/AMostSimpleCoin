@@ -144,14 +144,19 @@ class State(_RedisObject):
     Only functions are to add or subtract coins, and no checking is involved.
     All accounts are of 0 balance to begin with.
     """
-    def __init__(self, db: Database, path="state"):
+    def __init__(self, db: Database, path="state", backup_path="backup_state"):
         super().__init__(db, path)
 
+        self.lock = threading.Lock()
+
+        self._backup_path = backup_path
         self._state = RedisHashMap(db, self._path, int, int)  # ECPoint, MoneyAmount)    <- use those types again when encodium is patched
         self._hash = None
 
         self._mod_balance = lua_helpers.get_mod_balance(self._db.redis, self._path)
         self._get_balance = lua_helpers.get_get_balance(self._db.redis, self._path)
+        self._backup_state = lua_helpers.get_backup_state_function(self._r, self._path, self._backup_path)
+        self._restore_backup = lua_helpers.get_restore_backup_state_function(self._r, self._path, self._backup_path)
 
     def get(self, pub_x: ECPoint):
         return int(self._get_balance(keys=[pub_x]))
@@ -171,13 +176,16 @@ class State(_RedisObject):
         return self._state.all_keys()
 
     def backup_to(self, backup_path):
-        if self._r.exists(self._path):
-            self._r.hmset(backup_path, self._r.hgetall(self._path))
+            self.backup()
+
+    def backup(self):
+        self._backup_state()
 
     def restore_backup_from(self, backup_path):
-        if self._r.exists(backup_path):
-            self._r.hmset(self._path, self._r.hgetall(backup_path))
-            self._r.delete(backup_path)
+        self.restore_backup()
+
+    def restore_backup(self):
+        self._restore_backup()
 
     def reset(self):
         if self._r.exists(self._path):

@@ -1,7 +1,6 @@
 from WSSTT import Network
 
 from structs import *
-from blockchain import Chain
 
 
 """ Message Protocol:
@@ -73,7 +72,7 @@ class ChainPrimaryProvide(Encodium):
     chunk_size = Integer8Bytes.Definition()
 
 
-def set_message_handlers(chain: Chain, p2p: Network):
+def set_message_handlers(chain, p2p: Network):
 
     @p2p.method(BlockAnnounce, BLOCK_ANNOUNCE, CHAIN_INFO)
     def block_announce(peer, announcement: BlockAnnounce):
@@ -153,8 +152,8 @@ def set_message_handlers(chain: Chain, p2p: Network):
         size = provided.chunk_size
         n = provided.chunk_n
 
-        for i, h in enumerate(provided.hashes):
-            chain.seek_block(size * n + i, h)
+        chain.seek_blocks(*provided.hashes)
 
         if len(provided.hashes) >= size:
             return ChainPrimaryRequest(block_locator=chain.make_block_locator(), chunk_size=size, chunk_n=n+1)
+

@@ -30,10 +30,10 @@ class TestState(TestCase):
 
     def test_backups(self):
         original_balance = self.state.get(PUB_KEY_X_FOR_KNOWN_SE)
-        self.state.backup_to("backup_1")
+        self.state.backup()
         self.state.modify_balance(PUB_KEY_X_FOR_KNOWN_SE, 99)
         assert_equal(99 + original_balance, self.state.get(PUB_KEY_X_FOR_KNOWN_SE))
-        self.state.restore_backup_from("backup_1")
+        self.state.restore_backup()
         assert_equal(original_balance, self.state.get(PUB_KEY_X_FOR_KNOWN_SE))
 
     def test_hash(self):
