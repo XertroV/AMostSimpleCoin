@@ -61,6 +61,8 @@ def serialize_if_encodium(o):
 def parse_type_over(type, value):
     if type is not None:
         if issubclass(type, Encodium):
+            if value is None:
+                return type.from_json(value)
             return type.from_json(value.decode())
         return type(value)
     return value

@@ -73,7 +73,7 @@ class Chain:
     def seek_blocks(self, block_hashes):
         s = set()
         for block_hash in block_hashes:
-            if not self.has_block(block_hash) and block_hash not in self.currently_seeking:
+            if not self.has_block(block_hash):
                 s.add(block_hash)
         self.seeker.put(*s)
 

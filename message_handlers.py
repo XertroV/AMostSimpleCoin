@@ -88,8 +88,8 @@ def set_message_handlers(chain, p2p: Network):
     @p2p.method(BlockRequest, BLOCK_REQUEST, BLOCK_PROVIDE)
     def block_request(peer, request):
         print("Block Request")
-        hashes = request.hashes[:500]  # return at most 500 blocks
-        return BlockProvide(blocks=[chain.get_block(h) for h in hashes])
+        hashes = request.hashes  #[:500]  # return at most 500 blocks
+        return BlockProvide(blocks=[chain.get_block(h) for h in hashes if chain.has_block(h)])
 
     @p2p.method(BlockProvide, BLOCK_PROVIDE)
     def block_provide(peer, provided):
