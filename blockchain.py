@@ -3,7 +3,7 @@ import traceback
 
 from structs import *
 from helpers import *
-from database import Database, RedisDictionary, RedisSet
+from database import Database, RedisFlag, RedisHashMap, RedisSet, State
 
 # TODO : figure out best where to hook DB in
 TOP_BLOCK = 'top_block'
@@ -13,29 +13,37 @@ class Chain:
         self._db = db
         self.root = root
 
+        self.state = State(self._db)
+        self._backup_path = "backup_state"
+
         self.orphans = Orphanage()
         self.all_node_hashes = RedisSet(db, 'all_nodes')
-        self.all_node_hashes.add(root.hash)
-        self.state = State()
-        self.block_index = RedisDictionary(db, 'block_index', SimpleBlock)
-        self.block_index[self.root.hash] = self.root
-        self.block_heights = RedisDictionary(db, 'block_heights', int)
-        self.block_heights[self.root.hash] = 0
-        self.heights = RedisDictionary(db, 'heights', int)
-        self.heights[0] = self.root.hash
-        self.apply_to_state(self.root)
+        self.block_index = RedisHashMap(db, 'block_index', int, SimpleBlock)
+        self.block_heights = RedisHashMap(db, 'block_heights', int, int)
+        self.heights = RedisHashMap(db, 'heights', int)
+        self._initialized = RedisFlag(db, 'initialized')
 
         self.head = self._get_top_block()
 
         self.blocks_to_seek = PriorityQueue()  # format: (total_work, block_hash) - get early blocks first
 
+        if not self._initialized.is_true:
+            self.first_initialize()
+            self._initialized.set_true()
 
+    def first_initialize(self):
+        self.heights[0] = self.root.hash
+        self.block_heights[self.root.hash] = 0
+        self.block_index[self.root.hash] = self.root
+        self.all_node_hashes.add(self.root.hash)
+        self.state.reset()
+        self.apply_to_state(self.root)
 
     def _back_up_state(self):
-        self._backup_state = deepcopy(self.state)
+        self.state.backup_to(self._backup_path)
 
     def _restore_backed_up_state(self):
-        self.state = self._backup_state
+        self.state.restore_backup_from(self._backup_path)
 
     @property
     def primary_chain(self):
@@ -145,6 +153,7 @@ class Chain:
 
     def valid_for_state(self, block):
         state_hash = self.get_next_state_hash(block)
+        pp(self.state.full_state())
         assert_equal(block.state_hash, state_hash)
         if block.tx is not None:
             assert self.state.get(block.tx.signature.pub_x) >= block.tx.total
@@ -190,8 +199,6 @@ class Chain:
 
         return locator
 
-    # Static Methods
-
     def _order_from_alpha(self, early_node, late_node):
         path = []
         while early_node != late_node:
@@ -211,4 +218,3 @@ class Chain:
             else:
                 b2 = self.get_block(b2.links[0])
         return b1 if b1 == b2 else None
-

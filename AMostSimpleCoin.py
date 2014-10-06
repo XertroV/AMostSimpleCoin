@@ -23,10 +23,14 @@ port = int(sys.argv[sys.argv.index("-port") + 1]) if "-port" in sys.argv else 22
 extra_seed = sys.argv[sys.argv.index("-seed") + 1].split(":") if "-seed" in sys.argv else ('198.199.102.43', port)
 db_num = int(sys.argv[sys.argv.index("-db") + 1] if "-db" in sys.argv else 0)
 log_filename = sys.argv[sys.argv.index("-log") + 1] if "-log" in sys.argv else "AMSC.log"
+coinbase_se = int(sys.argv[sys.argv.index("-coinbase_se") + 1] if "-coinbase_se" in sys.argv else 1)
 
 # Create chain
 
 db = Database(db_num=db_num)
+
+if "-reset" in sys.argv:
+    db.redis.flushdb()
 
 root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437, coinbase=PUB_KEY_X_FOR_KNOWN_SE, state_hash=47941547378636015850744045282709669886060775903775382392759025879383704321130)
 chain = Chain(root_block, db)
@@ -40,14 +44,17 @@ set_message_handlers(chain, p2p)
 
 # inbuilt miner
 
-miner = Miner(chain, p2p)
+coinbase = pubkey_for_secret_exponent(coinbase_se)[0]  # get x coord
+
+miner = Miner(chain, p2p, coinbase)
 
 logging.basicConfig(filename=log_filename, level=logging.DEBUG)
 
 # Create root
 if "-create_root" in sys.argv:
-    root = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=int(time.time()), nonce=miner._special_nonce)
+    root = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=int(time.time()), nonce=miner._special_nonce, coinbase=PUB_KEY_X_FOR_KNOWN_SE, state_hash=47941547378636015850744045282709669886060775903775382392759025879383704321130)
     print(miner.mine_this_block(root).to_json())
+
 
 # Go time!
 

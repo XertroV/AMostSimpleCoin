@@ -9,7 +9,7 @@ from message_handlers import *
 
 class Miner:
 
-    def __init__(self, chain: Chain=None, p2p: Network=None, run_forever=True):
+    def __init__(self, chain: Chain=None, p2p: Network=None, coinbase=PUB_KEY_X_FOR_KNOWN_SE, run_forever=True):
         self._chain = chain
         self._special_nonce = 1234567890
         self._run_forever = run_forever
@@ -17,6 +17,7 @@ class Miner:
         self._running = False
         self._mining_thread = None
         self._stop = False
+        self._coinbase = coinbase
 
     def set_graph(self, graph):
         self._chain = graph
@@ -36,7 +37,9 @@ class Miner:
             nice_sleep(self._p2p, 6)
 
     def start(self, work_target=10**6):
-        candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce, work_target=work_target, total_work=self._chain.head.total_work + work_target)
+        candidate = SimpleBlock(links=[self._chain.head.hash], timestamp=int(time.time()), nonce=self._special_nonce,
+                                work_target=work_target, total_work=self._chain.head.total_work + work_target,
+                                coinbase=self._coinbase)
 
         self._stop = False
         self._mining_thread = fire(target=self._start_mining, args=[candidate])

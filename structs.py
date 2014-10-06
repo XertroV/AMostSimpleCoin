@@ -144,42 +144,6 @@ class SimpleBlock(Encodium):
         return len(self.links) == 0
 
 
-# State
-
-class State:
-    """ Super simple state device.
-    Only functions are to add or subtract coins, and no checking is involved.
-    All accounts are of 0 balance to begin with.
-    """
-    def __init__(self):
-        self._state = {}
-        self._all_pubkeys = set()
-        self._hash = None
-
-    def get(self, pub_x: ECPoint):
-        return 0 if pub_x not in self._all_pubkeys else self._state[pub_x]
-
-    def modify_balance(self, pub_x: ECPoint, value: MoneyAmount):
-        new_value = self.get(pub_x) + value
-        assert new_value >= 0
-        self._state[pub_x] = new_value
-        self._all_pubkeys.add(pub_x)
-        self._hash = None
-
-    def full_state(self):
-        return self._state
-
-    @property
-    def hash(self):
-        # todo : note : this hash method relies on a map of pubkey_x's to balances. it'll fail with any other state
-        if self._hash is None:
-            all_pubkeys = list(self._all_pubkeys)
-            all_pubkeys.sort()
-            pair_to_bytes = lambda p, b1, b2 : (p[0].to_bytes(b1, 'big') + p[1].to_bytes(b2, 'big'))
-            self._hash = global_hash(b''.join(map(lambda i : pair_to_bytes(i, 32, 8), zip(all_pubkeys, [self.get(i) for i in all_pubkeys]))))
-        return self._hash
-
-
 # Graph Datastructs
 
 class Orphanage:

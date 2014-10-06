@@ -1,7 +1,7 @@
 from hashlib import sha256
 from queue import PriorityQueue, Empty
 import threading
-import time
+import time, pprint
 
 import pycoin.ecdsa as ecdsa
 
@@ -13,6 +13,7 @@ ONE_WORK_HASH = MAX_32_BYTE_INT = 256 ** 32 - 1
 MAX_8_BYTE_INT = 256 ** 8 - 1
 
 FEE_CONSTANT = 1000  # 8000000  # Arbitrary-ish
+
 
 # Functions
 
@@ -58,10 +59,29 @@ def zero_if_none(thing):
         return 0
     return thing
 
+# Serialization stuff
+
 def serialize_if_encodium(o):
     if isinstance(o, Encodium):
         return o.to_json()
     return o
+
+def parse_type_over(type, value):
+    if type is not None:
+        if issubclass(type, Encodium):
+            return type.from_json(value.decode())
+        return type(value)
+    return value
+
+def many_parse_type_over(types, values):
+    return list(map(lambda p : parse_type_over(p[0], p[1]) ,zip(types, values)))
+
+def replace_type_with_decode_if_str(type):
+    if type == str:
+        return lambda i: i.decode()
+    return type
+
+# Threads
 
 def wait_for_all_threads_to_finish(threads):
     for t in threads:
@@ -72,7 +92,7 @@ def fire(target, args=(), kwargs={}):
     t.start()
     return t
 
-
+pp = pprint.PrettyPrinter(indent=4).pprint
 
 
 def nice_sleep(object, seconds):
@@ -91,6 +111,9 @@ def nice_sleep(object, seconds):
 
 def valid_secp256k1_signature(x, y, msg, r, s):
     return ecdsa.verify(ecdsa.generator_secp256k1, (x, y), global_hash(msg), (r, s))
+
+def pubkey_for_secret_exponent(exponent):
+    return ecdsa.public_pair_for_secret_exponent(ecdsa.generator_secp256k1, exponent)
 
 PUB_KEY_FOR_KNOWN_SE = ecdsa.public_pair_for_secret_exponent(ecdsa.generator_secp256k1, 1)
 PUB_KEY_X_FOR_KNOWN_SE = PUB_KEY_FOR_KNOWN_SE[0]
