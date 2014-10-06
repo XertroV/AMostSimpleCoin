@@ -35,7 +35,7 @@ p2p = Network(seeds=seeds, address=('0.0.0.0', port), debug=True)
 
 # Chain
 
-root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437, coinbase=PUB_KEY_X_FOR_KNOWN_SE, state_hash=47941547378636015850744045282709669886060775903775382392759025879383704321130)
+root_block = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=1412226468, nonce=529437, coinbase=PUB_KEY_X_FOR_KNOWN_SE, state_hash=110737787655952643436062828845269098869204940693353997171788395014951100605706)
 chain = Chain(root_block, db, p2p)
 
 # Handlers
@@ -52,7 +52,7 @@ logging.basicConfig(filename=log_filename, level=logging.DEBUG)
 
 # Create root
 if "-create_root" in sys.argv:
-    root = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=int(time.time()), nonce=miner._special_nonce, coinbase=PUB_KEY_X_FOR_KNOWN_SE, state_hash=47941547378636015850744045282709669886060775903775382392759025879383704321130)
+    root = SimpleBlock(links=[], work_target=10**6, total_work=10**6, timestamp=int(time.time()), nonce=miner._special_nonce, coinbase=PUB_KEY_X_FOR_KNOWN_SE, state_hash=110737787655952643436062828845269098869204940693353997171788395014951100605706)
     print(miner.mine_this_block(root).to_json())
     sys.exit()
 

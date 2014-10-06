@@ -1,6 +1,7 @@
 from copy import deepcopy
 import traceback
 import asyncio
+import random
 
 from WSSTT import Network
 
@@ -44,11 +45,11 @@ class Chain:
         self.state.reset()
         self.apply_to_state(self.root)
 
-    def _back_up_state(self):
-        self.state.backup()
+    def _back_up_state(self, backup_path):
+        self.state.backup_to(backup_path)
 
-    def _restore_backed_up_state(self):
-        self.state.restore_backup()
+    def _restore_backed_up_state(self, backup_path):
+        self.state.restore_backup_from(backup_path)
 
     @property
     def primary_chain(self):
@@ -69,11 +70,10 @@ class Chain:
     def _set_top_block(self, top_block):
         return self._db.set_kv(TOP_BLOCK, top_block.hash)
 
-    def seek_blocks(self, *block_hashes):
+    def seek_blocks(self, block_hashes):
         s = set()
         for block_hash in block_hashes:
             if not self.has_block(block_hash) and block_hash not in self.currently_seeking:
-                print('seeking', block_hash)
                 s.add(block_hash)
         self.seeker.put(*s)
 
@@ -93,7 +93,8 @@ class Chain:
         # todo: major bug - if blocks are added in the order [good, good, bad], say, and blocks 1 and 2 cause a reorg
         # then when block 3 causes an exception the state will revert but the head is still on block 2, which doesn't
         # match the state.
-        self._back_up_state()
+        some_path = str(random.randint(1000,1000000))
+        self._back_up_state(some_path)
         total_works = [(b.total_work, b) for b in blocks]
         total_works.sort()
         try:
@@ -108,7 +109,7 @@ class Chain:
                 for r in rejects:
                     self.orphans.put(r)
         except Exception as e:
-            self._restore_backed_up_state()
+            self._restore_backed_up_state(some_path)
             traceback.print_exc()
 
     def _add_block(self, block: SimpleBlock):
@@ -117,17 +118,19 @@ class Chain:
         :return: None on success, block if parent missing
         """
         print('_add_block', block.hash)
+        print('COINBASE _add_blk', block.coinbase)
         if self.has_block(block.hash): return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.has_block, block.links):
             print('Rejecting block: don\'t have all links')
-            self.seek_blocks(*block.links)
+            self.seek_blocks(block.links)
             return block
 
         # success, lets add it
         self._update_metadata(block)
         block.set_block_index(self.block_index)
         if self.better_than_head(block):
+            print('COINBASE _add_blk', block.coinbase)
             self.reorganize_to(block)
         self.all_node_hashes.add(block.hash)
         self.block_index[block.hash] = block
@@ -149,6 +152,7 @@ class Chain:
         print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self.block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
         self.mass_unapply(self.order_from(pivot, self.head)[1:])
+        print('COINBASE _re_org_', block.coinbase)
         self.mass_apply(self.order_from(pivot, block)[1:])
         print('Current State', self.state.full_state())
         self.head = block
@@ -162,10 +166,15 @@ class Chain:
         return state_hash
 
     def _get_next_state_hash_not_threadsafe(self, block):
-        self._back_up_state()
+        print("get_next_state_hash start")
+        pp(self.state.full_state())
+        temp_path = str(random.randint(1000,1000000))
+        self._back_up_state(temp_path)
         self._modify_state(block, 1)
         state_hash = self.state.hash
-        self._restore_backed_up_state()
+        self._restore_backed_up_state(temp_path)
+        print("get_next_state_hash done")
+        pp(self.state.full_state())
         return state_hash
 
     def valid_for_state(self, block):
@@ -179,8 +188,10 @@ class Chain:
 
     def apply_to_state(self, block):
         with self.state.lock:
+            print('COINBASE _aply_st', block.coinbase)
             assert self.valid_for_state(block)
             self._modify_state(block, 1)
+            pp(self.state.full_state())
 
     def unapply_to_state(self, block):
         self._modify_state(block, -1)
@@ -198,7 +209,9 @@ class Chain:
             self.unapply_to_state(block)
 
     def mass_apply(self, path):
+        print(path)
         for block in path:
+            print('COINBASE _ms_aply', block.coinbase)
             self.apply_to_state(block)
             if block in self.orphans: self.orphans.remove(block)
 

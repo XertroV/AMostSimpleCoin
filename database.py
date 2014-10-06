@@ -176,20 +176,18 @@ class State(_RedisObject):
         return self._state.all_keys()
 
     def backup_to(self, backup_path):
-            self.backup()
-
-    def backup(self):
-        self._backup_state()
+        print('Pre backup', self.full_state())
+        self._backup_state(keys=[backup_path])
 
     def restore_backup_from(self, backup_path):
-        self.restore_backup()
-
-    def restore_backup(self):
-        self._restore_backup()
+        print('Pre backup restore', self.full_state())
+        self._restore_backup(keys=[backup_path])
+        print('Post backup restore', self.full_state())
 
     def reset(self):
         if self._r.exists(self._path):
             self._r.delete(self._path)
+        self._state[0] = 0  # allows backing up an "empty" state
 
 
     @property

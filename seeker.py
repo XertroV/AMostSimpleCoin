@@ -11,7 +11,7 @@ class Seeker:
         self._follow_up = asyncio.PriorityQueue()
 
     def put(self, *block_hashes):
-        print("Seeker.put")
+        print("Seeker.put", block_hashes)
         s = set(block_hashes)
         s = s.difference(self._chain.currently_seeking)
         if len(s) > 0:
@@ -32,7 +32,7 @@ class Seeker:
             found = {h for h in hashes if self._chain.has_block(h)}
             self._chain.currently_seeking = self._chain.currently_seeking.difference(found)
             hashes = hashes.difference(found)
-            self._chain.seek_blocks(*hashes)
+            self._chain.seek_blocks(hashes)
             s = s.difference(found)
             s = s.difference(hashes)
 

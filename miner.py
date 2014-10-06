@@ -1,4 +1,4 @@
-import threading, time
+import threading, time, random
 
 from WSSTT import Network
 
@@ -19,9 +19,6 @@ class Miner:
         self._stop = False
         self._coinbase = coinbase
 
-    def set_graph(self, graph):
-        self._chain = graph
-
     def stop(self):
         self._stop = True
         if self._mining_thread: self._mining_thread.join()
@@ -34,9 +31,9 @@ class Miner:
         nice_sleep(self._p2p, 3)  # warm up
         while not self._stop and not self._p2p.is_shutdown:
             self.start()
-            nice_sleep(self._p2p, 6)
+            nice_sleep(self._p2p, random.randint(3, 10))
 
-    def start(self, work_target=10**6):
+    def start(self, work_target=10**5+1):
         chain_head = self._chain.head
         candidate = SimpleBlock(links=[chain_head.hash], timestamp=int(time.time()), nonce=self._special_nonce,
                                 work_target=work_target, total_work=chain_head.total_work + work_target,
@@ -55,7 +52,8 @@ class Miner:
         candidate = self.mine_this_block(candidate)
 
         if candidate is not None:
-            if self._chain: self._chain.add_blocks([candidate])
+            # try not adding it directly and just broadcasting
+            # if self._chain: self._chain.add_blocks([candidate])
             if self._p2p:
                 print('Announcing Block')
                 self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate))

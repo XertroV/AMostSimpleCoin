@@ -10,6 +10,7 @@ end
 
 local copy_hashmap = function (from, to)
     if redis.call("EXISTS", from) == 1 then
+        redis.call("DEL", to)
         redis.call("HMSET", to, unpack(redis.call("HGETALL", from)))
     end
 end
@@ -23,15 +24,15 @@ def make_script(r, lua_code, path, **kwargs):
 
 
 _backup_state = """
-    copy_hashmap('{path}', '{backup_path}')
+    copy_hashmap('{path}', KEYS[1])
 """
 
 def get_backup_state_function(r, path, backup_path):
     return make_script(r, _backup_state, path, backup_path=backup_path)
 
 _restore_backup_state = """
-    copy_hashmap('{backup_path}', '{path}')
-    redis.call("DEL", '{backup_path}')
+    copy_hashmap(KEYS[1], '{path}')
+    redis.call("DEL", KEYS[1])
 """
 
 def get_restore_backup_state_function(r, path, backup_path):
