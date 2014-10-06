@@ -133,10 +133,14 @@ def set_message_handlers(chain, p2p: Network):
 
         lca = chain.root.hash
         for block_hash in request.block_locator:
-            if chain.has_block(block_hash):
+            if chain.get_block(block_hash) in chain.primary_chain:
                 lca = block_hash
             else:
                 break
+
+        print(chain.get_block(lca).to_json(), chain.get_block(lca).hash)
+        print(chain.head.to_json(), chain.head.hash)
+        print(request.block_locator)
 
         return ChainPrimaryProvide(
             hashes=[b.hash for b in chain.order_from(chain.get_block(lca), chain.head)[max(0, start - 10):start + request.chunk_size]],

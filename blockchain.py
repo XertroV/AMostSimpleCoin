@@ -92,7 +92,7 @@ class Chain:
         rejects = []
         # todo: major bug - if blocks are added in the order [good, good, bad], say, and blocks 1 and 2 cause a reorg
         # then when block 3 causes an exception the state will revert but the head is still on block 2, which doesn't
-        # match the state.
+        # match the state.  - I think this is fixed now
         some_path = str(random.randint(1000,1000000))
         self._back_up_state(some_path)
 
@@ -104,12 +104,9 @@ class Chain:
                 r = self._add_block(block)
                 if r is not None:
                     rejects.append(r)
-            if rejects != blocks:
-                self.add_blocks(rejects)
-            else:
-                print('rejects', rejects)
-                for r in rejects:
-                    self.orphans.put(r)
+            print('rejects', rejects)
+            for r in rejects:
+                self.orphans.put(r)
         except Exception as e:
             self._restore_backed_up_state(some_path)
             traceback.print_exc()
@@ -200,8 +197,6 @@ class Chain:
             self.state.modify_balance(block.tx.recipient, direction * block.tx.value)
             self.state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)
         self.state.modify_balance(block.coinbase, direction * block.coins_generated)
-        print('Coinbase balance mod:', block.coinbase)
-        pp(self.state.full_state())
 
     def mass_unapply(self, path):
         for block in path[::-1]:

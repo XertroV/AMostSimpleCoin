@@ -35,13 +35,20 @@ class Seeker:
 
     def put(self, *block_hashes):
 
+        blocks_at_a_time = 100
+
         print("Seeker.put", block_hashes)
         s = set(block_hashes)
         s = s.difference(self._chain.currently_seeking)
         if len(s) > 0:
-            asyncio.async(self._p2p.farm_message(BLOCK_REQUEST, BlockRequest(hashes=list(s))))
-            for h in s:
-                self._chain.currently_seeking.add(h)
+            s = list(s)
+            for i in range(len(block_hashes) // blocks_at_a_time + 1):
+                chunk = s[i * blocks_at_a_time : (i + 1) * blocks_at_a_time]
+                asyncio.async(self._p2p.farm_message(BLOCK_REQUEST, BlockRequest(hashes=chunk)))
+                for h in chunk:
+                    self._chain.currently_seeking.add(h)
+                (yield from asyncio.sleep(3))
+
 
         timestamp = time.time()
 

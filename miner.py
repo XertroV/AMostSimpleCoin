@@ -1,4 +1,4 @@
-import threading, time, random
+import threading, time, random, asyncio
 
 from WSSTT import Network
 
@@ -53,7 +53,6 @@ class Miner:
 
         if candidate is not None:
             # try not adding it directly and just broadcasting
-            # if self._chain: self._chain.add_blocks([candidate])
             if self._p2p:
                 print('Announcing Block')
                 self._p2p.broadcast(BLOCK_ANNOUNCE, BlockAnnounce(block=candidate))

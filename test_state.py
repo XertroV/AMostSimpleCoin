@@ -3,6 +3,7 @@ from unittest import TestCase
 from database import Database, State
 from helpers import *
 
+
 class TestState(TestCase):
     def setUp(self):
         self.db = Database(db_num=15)
@@ -39,3 +40,4 @@ class TestState(TestCase):
     def test_hash(self):
         _hash = global_hash(PUB_KEY_X_FOR_KNOWN_SE.to_bytes(32, 'big') + (20).to_bytes(8, 'big'))
         assert_equal(_hash, self.state.hash)
+
