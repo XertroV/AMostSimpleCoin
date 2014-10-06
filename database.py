@@ -55,11 +55,11 @@ concat = Database.concat
 
 class _RedisObject:
 
-    def __init__(self, db: Database, path="", encodium_type=None):
+    def __init__(self, db: Database, path="", value_type=None):
         self._path = path
         self._db = db
         self._r = db.redis
-        self._type = encodium_type
+        self._type = value_type
 
 
 class RedisFlag(_RedisObject):
@@ -77,10 +77,14 @@ class RedisFlag(_RedisObject):
         return False
 
 
+class RedisList(_RedisObject):
+    pass
+
+
 class RedisSet(_RedisObject):
 
     def __iter__(self):
-        self._set_iterator = self._db.redis.smembers(self._path)
+        self._set_iterator = self.members()
         return iter(self._set_iterator)
 
     def __next__(self):
@@ -94,16 +98,14 @@ class RedisSet(_RedisObject):
         return self._db.redis.sismember(self._path, serialize_if_encodium(item))
 
     def add(self, *args):
-        return self._db.redis.sadd(self._path, *map(serialize_if_encodium, args))
+        return self._r.sadd(self._path, *map(serialize_if_encodium, args))
 
     def remove(self, *args):
-        return self._db.redis.srem(self._path, *map(serialize_if_encodium, args))
+        return self._r.srem(self._path, *map(serialize_if_encodium, args))
 
     def members(self):
         return_set = self._db.redis.smembers(self._path)
-        if self._type is not None:
-            return_set = {self._type(member) for member in return_set}
-        return return_set
+        return {parse_type_over(self._type, member) for member in return_set}
 
 
 class RedisHashMap(_RedisObject):
@@ -176,13 +178,10 @@ class State(_RedisObject):
         return self._state.all_keys()
 
     def backup_to(self, backup_path):
-        print('Pre backup', self.full_state())
         self._backup_state(keys=[backup_path])
 
     def restore_backup_from(self, backup_path):
-        print('Pre backup restore', self.full_state())
         self._restore_backup(keys=[backup_path])
-        print('Post backup restore', self.full_state())
 
     def reset(self):
         if self._r.exists(self._path):
