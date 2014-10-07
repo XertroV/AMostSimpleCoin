@@ -71,16 +71,15 @@ class Chain:
         return self._db.set_kv(TOP_BLOCK, top_block.hash)
 
     def seek_blocks(self, block_hashes):
-        s = set()
-        for block_hash in block_hashes:
-            if not self.has_block(block_hash):
-                s.add(block_hash)
-        self.seeker.put(*s)
+        self.seeker.put(*[h for h in block_hashes if not self.has_block(h)])
 
     def height_of_block(self, block_hash):
         return self.block_heights[block_hash]
 
     def has_block(self, block_hash):
+        return block_hash in self.all_node_hashes or self.orphans.contains_block_hash(block_hash)
+
+    def contains_block(self, block_hash):
         return block_hash in self.all_node_hashes
 
     def get_block(self, block_hash):
@@ -99,8 +98,11 @@ class Chain:
         total_works = [(b.total_work, b) for b in blocks]
         total_works.sort()
 
+        most_recent_block = None
+
         try:
             for tw, block in total_works:
+                most_recent_block = block
                 r = self._add_block(block)
                 if r is not None:
                     rejects.append(r)
@@ -110,7 +112,7 @@ class Chain:
         except Exception as e:
             self._restore_backed_up_state(some_path)
             traceback.print_exc()
-            print('EXCEPTION CAPTURED WHILE ADDING BLOCK')
+            print('EXCEPTION CAPTURED WHILE ADDING BLOCK', most_recent_block.to_json())
 
     def _add_block(self, block: SimpleBlock):
         """
@@ -121,7 +123,7 @@ class Chain:
         print('COINBASE _add_blk', block.coinbase)
         if self.has_block(block.hash): return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
-        if not all_true(self.has_block, block.links):
+        if not all_true(self.contains_block, block.links):
             print('Rejecting block: don\'t have all links')
             # don't just look for children, get a primary chain
             self.seek_blocks(block.links)

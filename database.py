@@ -222,3 +222,45 @@ class State(_RedisObject):
             pair_to_bytes = lambda p, b1, b2 : (p[0].to_bytes(b1, 'big') + p[1].to_bytes(b2, 'big'))
             self._hash = global_hash(b''.join(map(lambda i : pair_to_bytes(i, 32, 8), zip(all_pubkeys, [self.get(i) for i in all_pubkeys]))))
         return self._hash
+
+
+# todo : make LUA scripts for orphanage
+"""
+local orph_contains = function (block_hash)
+    return redis.call(
+"""
+
+
+class Orphanage:
+    """ An Orphanage holds orphans.
+    It acts as a priority queue, through put(), get(), etc. This is sorted by sigmadiff.
+    For membership it acts as a set.
+    """
+    def __init__(self, db, path="orphanage"):
+        self._set = RedisSet(db, path)  # set of blocks
+        self._path_hash_set = Database.concat(path, 'hs')
+        self._hash_set = RedisSet(db, self._path_hash_set)  # set of block_hashes
+        self._parents_by_name = defaultdict(set)  # todo - make defaultdict in redis...
+
+    def __contains__(self, block: SimpleBlock):
+        return block in self._set
+
+    def remove(self, block: SimpleBlock):
+        if block not in self._set:
+            raise BlockNotFoundException()
+        self._set.remove(block)
+        self._hash_set.remove(block.hash)
+        self._parents_by_name[block.links[0]].remove(block)
+
+    def put(self, block: SimpleBlock):
+        self._set.add(block)
+        self._hash_set.add(block.hash)
+        self._parents_by_name[block.links[0]].add(block)
+
+    def children_of(self, parent_hash):
+        return {b for b in self._set if b.links[0] == parent_hash}
+        if self._parents_by_name.get(parent_hash) is not None:  # need to use .get here because __getitem__ invokes the default
+            return self._parents_by_name[parent_hash]  # safe to use __getitem__ here because we know it exists (we could anyway)
+
+    def contains_block_hash(self, block_hash):
+        return block_hash in self._hash_set

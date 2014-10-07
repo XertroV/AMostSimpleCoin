@@ -3,6 +3,7 @@ from collections import defaultdict
 from encodium import *
 
 from helpers import *
+from database import RedisHashMap, RedisSet, RedisFlag, RedisList, Database
 
 # Structs
 
@@ -143,57 +144,3 @@ class SimpleBlock(Encodium):
         return len(self.links) == 0
 
 
-# Graph Datastructs
-
-
-class Orphanage:
-    """ An Orphanage holds orphans.
-    It acts as a priority queue, through put(), get(), etc. This is sorted by sigmadiff.
-    For membership it acts as a set.
-    """
-    def __init__(self):
-        self._priority_queue = PriorityQueue()
-        self._set = set()  # set of blocks
-        self._parents_by_name = defaultdict(set)
-        self._removed = set()
-
-    def __contains__(self, block: SimpleBlock):
-        return False if block in self._removed else block in self._set
-
-    def remove(self, block: SimpleBlock):
-        if block not in self._set or block in self._removed:
-            raise BlockNotFoundException()
-        self._set.remove(block)
-        self._parents_by_name[block.links[0]].remove(block)
-        self._removed.add(block)
-
-    def _put_orphan(self, block: SimpleBlock):
-        print('Orphanage, put block', block.to_json())
-        self._priority_queue.put((block.total_work, block))
-
-    def put(self, block: SimpleBlock):
-        self._put_orphan(block)
-        self._set.add(block)
-        self._parents_by_name[block.links[0]].add(block)
-        if block in self._removed:
-            self._removed.remove(block)
-
-    def _get_next_block(self):
-        sigma_diff, block = self._priority_queue.get()
-        while block in self._removed:
-            sigma_diff, block = self._priority_queue.get()
-        return block
-
-    def get(self):
-        block = self._get_next_block()
-        self._set.remove(block)
-        return block
-
-    def visit(self):
-        block = self._get_next_block()
-        self._put_orphan(block)
-        return block
-
-    def children_of(self, parent_hash):
-        if self._parents_by_name.get(parent_hash) is not None:  # need to use .get here because __getitem__ invokes the default
-            return self._parents_by_name[parent_hash]  # safe to use __getitem__ here because we know it exists (we could anyway)

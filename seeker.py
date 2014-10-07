@@ -12,39 +12,39 @@ class Seeker:
         self._chain = chain
         self._p2p = p2p
         self._follow_up = asyncio.PriorityQueue()
+        self._time_to_wait_before_follow_up = 2
+        self._follow_up_at_most_at_once = 100
 
     def any_to_follow_up(self):
         if self._follow_up.empty():
             return False
         peek = self._follow_up.get_nowait()
         self._follow_up.put_nowait(peek)
-        print('peek, should not be generator', peek)
-        if current_time() - peek[0] > 10:
+        if current_time() - peek[0] > self._time_to_wait_before_follow_up:
             return True
         return False
 
     def follow_up(self):
         if not self.any_to_follow_up():
             return
-        hashes = set()
-        while self.any_to_follow_up():
+        hashes = []
+        while self.any_to_follow_up() and len(hashes) < self._follow_up_at_most_at_once:
             ts, h = self._follow_up.get_nowait()
-            hashes.add(h)
+            if not self._chain.has_block(h):
+                hashes.append(h)
 
+        self._chain.currently_seeking = self._chain.currently_seeking.difference(set(hashes))
         self._chain.seek_blocks(hashes)
 
     def put(self, *block_hashes):
-        print("Seeker.put", block_hashes)
-        s = {h for h in block_hashes if h not in self._chain.currently_seeking}
+        s = [h for h in block_hashes if h not in self._chain.currently_seeking]
         if len(s) > 0:
-            asyncio.async(self._p2p.farm_message(BLOCK_REQUEST, BlockRequest(hashes=list(s))))
+            asyncio.async(self._p2p.farm_message(BLOCK_REQUEST, BlockRequest(hashes=s)))
             for h in s:
                 self._chain.currently_seeking.add(h)
 
 
-        timestamp = time.time()
+        for hash in s:
+            self._follow_up.put_nowait((time.time(), hash))
 
         self.follow_up()
-
-        for hash in s:
-            self._follow_up.put((timestamp, hash))

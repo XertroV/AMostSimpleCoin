@@ -11,6 +11,7 @@ def watch_peer_top_blocks_loop(chain, p2p: Network):
     yield from asyncio.sleep(3)
     while not p2p.is_shutdown:
         p2p.broadcast(CHAIN_INFO, ChainInfoRequest())
+        chain.seeker.follow_up()
         yield from asyncio.sleep(30)  # we don't want to piss people off if this is too frequent
 
 
