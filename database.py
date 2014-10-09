@@ -226,8 +226,6 @@ class State(_RedisObject):
 
 # todo : make LUA scripts for orphanage
 """
-local orph_contains = function (block_hash)
-    return redis.call(
 """
 
 
@@ -235,6 +233,22 @@ class Orphanage:
     """ An Orphanage holds orphans.
     It acts as a priority queue, through put(), get(), etc. This is sorted by sigmadiff.
     For membership it acts as a set.
+
+    Requirements:
+    membership test for orphans (1)
+    retrieval of orphans (2)
+    reverse lookup (of linking blocks) (3 and 4) (expensive)
+
+    Redis Particulars:
+     (ser_ indicates a serialized version of a block )
+     {variable}
+
+        Internal Structures:
+            1. set(block_hashes)
+            2. hash_map(block_hash -> ser_block)
+            3. hash_map(block_hash -> {linking_block_hashes})
+            4. {linking_block_hashes} -> set(linking_block_hashes)
+
     """
     def __init__(self, db, path="orphanage"):
         self._set = RedisSet(db, path)  # set of blocks
