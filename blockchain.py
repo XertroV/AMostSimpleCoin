@@ -8,7 +8,7 @@ from WSSTT import Network
 from structs import *
 from helpers import *
 from seeker import Seeker
-from database import Database, RedisFlag, RedisHashMap, RedisSet, State
+from database import Database, RedisFlag, RedisHashMap, RedisSet, State, Orphanage
 
 # TODO : figure out best where to hook DB in
 TOP_BLOCK = 'top_block'
@@ -21,7 +21,7 @@ class Chain:
 
         self.state = State(self._db)
 
-        self.orphans = Orphanage()
+        self.orphans = Orphanage(self._db)
         self.all_node_hashes = RedisSet(db, 'all_nodes')
         self.block_index = RedisHashMap(db, 'block_index', int, SimpleBlock)
         self.block_heights = RedisHashMap(db, 'block_heights', int, int)
@@ -108,7 +108,7 @@ class Chain:
                     rejects.append(r)
             print('rejects', rejects)
             for r in rejects:
-                self.orphans.put(r)
+                self.orphans.add(r)
         except Exception as e:
             self._restore_backed_up_state(some_path)
             traceback.print_exc()
@@ -209,7 +209,8 @@ class Chain:
         for block in path:
             print('COINBASE _ms_aply', block.coinbase)
             self.apply_to_state(block)
-            if block in self.orphans: self.orphans.remove(block)
+            if block in self.orphans:
+                self.orphans.remove(block)
 
     def better_than_head(self, block):
         return block.total_work > self.head.total_work

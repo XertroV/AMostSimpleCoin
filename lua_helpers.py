@@ -25,25 +25,22 @@ def make_script(r, lua_code, path, **kwargs):
 # State
 #
 
-# Backup / restore
-
+# Backup
 _backup_state = """
     copy_hashmap('{path}', KEYS[1])
 """
-
 def get_backup_state_function(r, path, backup_path):
     return make_script(r, _backup_state, path, backup_path=backup_path)
 
+# Restore
 _restore_backup_state = """
     copy_hashmap(KEYS[1], '{path}')
     redis.call("DEL", KEYS[1])
 """
-
 def get_restore_backup_state_function(r, path, backup_path):
     return make_script(r, _restore_backup_state, path, backup_path=backup_path)
 
-# Balance
-
+# Balance, modify
 _mod_balance = """
     local n
     local i
@@ -58,68 +55,66 @@ _mod_balance = """
             redis.call("HDEL", "{path}", KEYS[i])
         end
     end
-    """
-
+"""
 def get_mod_balance(r, path):
     return make_script(r, _mod_balance, path)
 
+# Balance, get
 _get_balance = """
     return get_balance("{path}", KEYS[1])
     """
-
 def get_get_balance(r, path):
     return make_script(r, _get_balance, path)
 
 
 #
 # Orphanage
-
-"""
-local orph_contains = function (path, block_hash)
-  return redis.call("SISMEMBER", gen_set_path(path), block_hash)
-end
-
-local orph_get = function(path, block_hash)
-  return redis.call("HGET", gen_orph_map_path(path), block_hash)
-end
-
-local orphs_linking_to = function(block_hash)
-  local set_key = redis.call("HGET", gen_rev_map_path(path), block_hash)
-  return redis.call("SMEMBERS", gen_rev_key_path(path, block_hash))
-end
-
---[[ Modification ]]
-
-local orph_add = function (path, block, block_hash, linked_block_hash)
-  redis.call("SADD", gen_set_path(path), block_hash)
-  redis.call("HSET", gen_orph_map_path(path), block_hash, block)
-  redis.call("HSET", gen_rev_map_path(path), linked_block_hash, gen_rev_key_path(path, linked_block_hash))
-  redis.call("SADD", gen_rev_key_path(path, linked_block_hash), block_hash)
-end
-
-local orph_remove = function (path, block_hash)
-  redis.call("SREM", gen_set_path(path), block_hash)
-  redis.call("HDEL", gen_orph_map_path(path), block_hash)
-  redis.call("SREM", gen_rev_key_path(path, linked_block_hash), block_hash)
-  if redis.call("EXISTS", gen_rev_key_path(path, linked_block_hash)) == 0 then
-    redis.call("HDEL", gen_rev_map_path(path), linked_block_hash, gen_rev_key_path(path, linked_block_hash))
-  end
-end"""
 #
 
 with open('lua_scripts/orphanage.lua') as f:
-    orphanage_functions = f.read()
+    orphanage_functions = ''.join(f.readlines())
 
 def make_orphanage_script(r, lua_code, path):
+    #print("Script", orphanage_functions + lua_code)
     return make_script(r, orphanage_functions + lua_code, path)
 
+# Membership Test
+_orphanage_contains = """
+    return orph_contains("{path}", KEYS[1])
+"""
+def get_orphanage_contains(r, path):
+    # KEYS[1] is the block hash
+    return make_orphanage_script(r, _orphanage_contains, path)
+
+# Get
+_orphanage_get = """
+    return orph_get("{path}", KEYS[1])
+"""
+def get_orphanage_get(r, path):
+    # KEYS[1] is the block_hash
+    return make_orphanage_script(r, _orphanage_get, path)
+
+# Get linking block hashes
+_orphanage_linking_to = """
+    return orphs_linking_to("{path}", KEYS[1])
+"""
+def get_orphanage_linking_to(r, path):
+    # KEYS[1] is the block_hash of a block linked to by orphans. A set of orphan hashes is returned
+    return make_orphanage_script(r, _orphanage_linking_to, path)
 
 _orphanage_add = """
     return orph_add("{path}", KEYS[1], KEYS[2], KEYS[3])
 """
-
 def get_orphanage_add(r, path):
     # KEYS[1,2,3] are block, block_hash, linked_block_hash respectively
     return make_orphanage_script(r, _orphanage_add, path)
 
-_orphanage_add
+
+_orphanage_remove = """
+    return orph_remove("{path}", KEYS[1], KEYS[2])
+"""
+def get_orphanage_remove(r, path):
+    # KEYS[1] is the block_hash, linked_block_hash
+    return make_orphanage_script(r, _orphanage_remove, path)
+
+

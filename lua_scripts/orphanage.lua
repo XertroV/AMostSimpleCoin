@@ -17,19 +17,19 @@ local _rev_key_suffix = ".orph_rev"  -- suffix for above pointer
 --[[ generators for those paths ]]
 
 local gen_set_path = function (path)
-  return path + _set
+  return path .. _set
 end
 
 local gen_orph_map_path = function (path)
-  return path + _orph_map
+  return path .. _orph_map
 end
 
 local gen_rev_map_path = function (path)
-  return path + _rev_map
+  return path .. _rev_map
 end
 
 local gen_rev_key_path = function (path, block_hash)
-  return path + block_hash + _rev_key_suffix
+  return path .. block_hash .. _rev_key_suffix
 end
 
 --[[ FUNCTIONS FOR SUPPORTED OPERATIONS ]]
@@ -44,7 +44,7 @@ local orph_get = function(path, block_hash)
   return redis.call("HGET", gen_orph_map_path(path), block_hash)
 end
 
-local orphs_linking_to = function(block_hash)
+local orphs_linking_to = function(path, block_hash)
   local set_key = redis.call("HGET", gen_rev_map_path(path), block_hash)
   return redis.call("SMEMBERS", gen_rev_key_path(path, block_hash))
 end
@@ -58,7 +58,7 @@ local orph_add = function (path, block, block_hash, linked_block_hash)
   redis.call("SADD", gen_rev_key_path(path, linked_block_hash), block_hash)
 end
 
-local orph_remove = function (path, block_hash)
+local orph_remove = function (path, block_hash, linked_block_hash)
   redis.call("SREM", gen_set_path(path), block_hash)
   redis.call("HDEL", gen_orph_map_path(path), block_hash)
   redis.call("SREM", gen_rev_key_path(path, linked_block_hash), block_hash)

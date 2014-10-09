@@ -13,15 +13,6 @@ class strbytes(str):  # it plays nice with redis now -- encodes and decodes byte
 
 
 class Database:
-    """ Database structure:
-    legend: *key - value*
-
-    meta.latest.index - <latest_index>: int
-
-    index.count.<latest_index> - <count>
-    <index>:0..<count - 1> - block hash
-    <block_hash> - block.to_json()
-    """
 
     def __init__(self, db_num=0):
         self.redis = Redis(db=db_num)
@@ -224,10 +215,6 @@ class State(_RedisObject):
         return self._hash
 
 
-# todo : make LUA scripts for orphanage
-"""
-"""
-
 
 class Orphanage:
     """ An Orphanage holds orphans.
@@ -251,30 +238,26 @@ class Orphanage:
 
     """
     def __init__(self, db, path="orphanage"):
-        self._set = RedisSet(db, path)  # set of blocks
-        self._path_hash_set = Database.concat(path, 'hs')
-        self._hash_set = RedisSet(db, self._path_hash_set)  # set of block_hashes
-        self._parents_by_name = defaultdict(set)  # todo - make defaultdict in redis...
+        self._db = db
+        self._r = r = db.redis
+        self._path = path
+        self._get = lua_helpers.get_orphanage_get(r, path)
+        self._add = lua_helpers.get_orphanage_add(r, path)
+        self._contains = lua_helpers.get_orphanage_contains(r, path)
+        self._remove = lua_helpers.get_orphanage_remove(r, path)
+        self._linking_to = lua_helpers.get_orphanage_linking_to(r, path)
 
     def __contains__(self, block: SimpleBlock):
-        return block in self._set
+        return self._contains(keys=[block.hash])
 
     def remove(self, block: SimpleBlock):
-        if block not in self._set:
-            raise BlockNotFoundException()
-        self._set.remove(block)
-        self._hash_set.remove(block.hash)
-        self._parents_by_name[block.links[0]].remove(block)
+        return self._remove(keys=[block.hash, block.links[0]])
 
-    def put(self, block: SimpleBlock):
-        self._set.add(block)
-        self._hash_set.add(block.hash)
-        self._parents_by_name[block.links[0]].add(block)
+    def add(self, block: SimpleBlock):
+        return self._add(keys=[block, block.hash, block.links[0]])
 
     def children_of(self, parent_hash):
-        return {b for b in self._set if b.links[0] == parent_hash}
-        if self._parents_by_name.get(parent_hash) is not None:  # need to use .get here because __getitem__ invokes the default
-            return self._parents_by_name[parent_hash]  # safe to use __getitem__ here because we know it exists (we could anyway)
+        return self._linking_to(keys=[parent_hash])
 
     def contains_block_hash(self, block_hash):
-        return block_hash in self._hash_set
+        return self._contains(keys=[block_hash])
