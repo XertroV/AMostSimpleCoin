@@ -68,6 +68,7 @@ class ChainPrimaryRequest(Encodium):
 
 class ChainPrimaryProvide(Encodium):
     hashes = List.Definition(Hash.Definition())
+    total_works = List.Definition(Integer32Bytes.Definition())
     chunk_n = Integer8Bytes.Definition()
     chunk_size = Integer8Bytes.Definition()
 
@@ -121,29 +122,41 @@ def set_message_handlers(chain, p2p: Network):
     @p2p.method(ChainInfoProvide, CHAIN_INFO_PROVIDE, CHAIN_PRIMARY)
     def chain_info_provide(peer, provided):
         print("Chain Info Provide")
-        if not chain.has_block(provided.top_block):
+        if provided.top_block not in chain.current_node_hashes:
             size = 10000
             n = 0
+            print("Chain Info Provide returning")
             return ChainPrimaryRequest(block_locator=chain.make_block_locator(), chunk_size=size, chunk_n=n)
+        print("Chain Info Provide did nothing")
 
     @p2p.method(ChainPrimaryRequest, CHAIN_PRIMARY, CHAIN_PRIMARY_PROVIDE)
     def chain_primary(peer, request):
         print("Primary Chain")
         start = request.chunk_size * request.chunk_n
 
+        primary_chain_set = {i.hash for i in chain.primary_chain}
         lca = chain.root.hash
         for block_hash in request.block_locator:
-            if chain.get_block(block_hash) in chain.primary_chain:
+            if chain.get_block(block_hash) in primary_chain_set:
                 lca = block_hash
             else:
                 break
+
+        print("Found LCA", lca)
 
         print(chain.get_block(lca).to_json(), chain.get_block(lca).hash)
         print(chain.head.to_json(), chain.head.hash)
         print(request.block_locator)
 
+        print("Zipping")
+
+        x = list(zip(*[(b.total_work, b.hash) for b in chain.order_from(chain.get_block(lca), chain.head)[start:start + request.chunk_size]]))
+
+        print("Sending")
+
         return ChainPrimaryProvide(
-            hashes=[b.hash for b in chain.order_from(chain.get_block(lca), chain.head)[start:start + request.chunk_size]],
+            total_works=list(x[0]),
+            hashes=list(x[1]),
             chunk_n=request.chunk_n,
             chunk_size=request.chunk_size)
 
@@ -154,7 +167,7 @@ def set_message_handlers(chain, p2p: Network):
         n = provided.chunk_n
 
         # todo: this needs to be async
-        chain.seek_blocks(provided.hashes)
+        chain.seek_blocks_with_total_work(zip(provided.total_works, provided.hashes))
 
         if len(provided.hashes) >= size:
             return ChainPrimaryRequest(block_locator=chain.make_block_locator(), chunk_size=size, chunk_n=n+1)

@@ -22,7 +22,7 @@ class Chain:
         self.state = State(self._db)
 
         self.orphans = Orphanage(self._db)
-        self.all_node_hashes = RedisSet(db, 'all_nodes')
+        self.current_node_hashes = RedisSet(db, 'all_nodes')
         self.block_index = RedisHashMap(db, 'block_index', int, SimpleBlock)
         self.block_heights = RedisHashMap(db, 'block_heights', int, int)
         self.heights = RedisHashMap(db, 'heights', int)
@@ -41,7 +41,7 @@ class Chain:
         self.heights[0] = self.root.hash
         self.block_heights[self.root.hash] = 0
         self.block_index[self.root.hash] = self.root
-        self.all_node_hashes.add(self.root.hash)
+        self.current_node_hashes.add(self.root.hash)
         self.state.reset()
         self._apply_to_state(self.root)
 
@@ -73,14 +73,20 @@ class Chain:
     def seek_blocks(self, block_hashes):
         self.seeker.put(*[h for h in block_hashes if not self.has_block(h)])
 
+    def seek_blocks(self, block_hashes):
+        self.seeker.put(*[h for h in block_hashes if not self.has_block(h)])
+
+    def seek_blocks_with_total_work(self, pairs):
+        self.seeker.put_with_work(*pairs)
+
     def height_of_block(self, block_hash):
         return self.block_heights[block_hash]
 
     def has_block(self, block_hash):
-        return block_hash in self.all_node_hashes or self.orphans.contains_block_hash(block_hash)
+        return block_hash in self.current_node_hashes or self.orphans.contains_block_hash(block_hash)
 
     def contains_block(self, block_hash):
-        return block_hash in self.all_node_hashes
+        return block_hash in self.current_node_hashes
 
     def get_block(self, block_hash):
         return self.block_index[block_hash]
@@ -137,7 +143,7 @@ class Chain:
         if self.better_than_head(block):
             print('COINBASE _add_blk', block.coinbase)
             self._reorganize_to(block)
-        self.all_node_hashes.add(block.hash)
+        self.current_node_hashes.add(block.hash)
         self.block_index[block.hash] = block
         print("Chain._add_block - processed", block.hash)
         orphaned_children = self.orphans.children_of(block.hash)

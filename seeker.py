@@ -1,6 +1,7 @@
 import asyncio, time
 
 from message_handlers import BLOCK_REQUEST, BlockRequest
+from helpers import MAX_32_BYTE_INT
 
 def current_time():
     return int(time.time())
@@ -12,7 +13,7 @@ class Seeker:
         self._chain = chain
         self._p2p = p2p
         self._follow_up = asyncio.PriorityQueue()
-        self._time_to_wait_before_follow_up = 5
+        self._time_to_wait_before_follow_up = 2
         # todo: write an alg that changes this variable depending on how many good blocks we get back to find
         # a practical maximum
         self._follow_up_at_most_at_once = 50
@@ -24,7 +25,7 @@ class Seeker:
             return False
         peek = self._follow_up.get_nowait()
         self._follow_up.put_nowait(peek)
-        if current_time() - peek[0] > self._time_to_wait_before_follow_up:
+        if current_time() - peek[1] > self._time_to_wait_before_follow_up:
             return True
         return False
 
@@ -34,24 +35,34 @@ class Seeker:
         still_to_seek = []  # list of block hashes
         done = set()  # block hashes
         while self.any_to_follow_up() and len(still_to_seek) < self._follow_up_at_most_at_once:
-            ts, h = self._follow_up.get_nowait()
+            height, ts, h = self._follow_up.get_nowait()
             if not self._chain.has_block(h):
                 still_to_seek.append(h)
-                self._follow_up.put_nowait((time.time(), h))  # need to use current time, not old time
+                self._follow_up.put_nowait((height, time.time(), h))  # need to use current time, not old time
             else:
                 done.add(h)
 
         self._chain.currently_seeking = self._chain.currently_seeking.difference(done)
         self.farm_seek(still_to_seek)
 
-        asyncio.get_event_loop().call_later(self._time_to_wait_before_follow_up, self.follow_up)
+        asyncio.get_event_loop().call_later(self._time_to_wait_before_follow_up + 1, self.follow_up)
 
     def put(self, *block_hashes):
         s = [h for h in block_hashes if h not in self._chain.currently_seeking]
         self.farm_seek(s)
 
         for hash in s:
-            self._follow_up.put_nowait((time.time(), hash))
+            self._put_nowait(MAX_32_BYTE_INT, time.time(), hash)  # really big height as first in tuple
+
+    def put_with_work(self, *pairs):
+        s = [h for w, h in pairs if h not in self._chain.currently_seeking]
+        self.farm_seek(s)
+
+        for work, hash in pairs:
+            self._put_nowait(work, time.time(), hash)
+
+    def _put_nowait(self, total_work, timestamp, hash):
+        self._follow_up.put_nowait((total_work, timestamp, hash))
 
     def farm_seek(self, block_hashes):
         if len(block_hashes) > 0:
