@@ -12,8 +12,10 @@ class Seeker:
         self._chain = chain
         self._p2p = p2p
         self._follow_up = asyncio.PriorityQueue()
-        self._time_to_wait_before_follow_up = 2
-        self._follow_up_at_most_at_once = 100
+        self._time_to_wait_before_follow_up = 5
+        # todo: write an alg that changes this variable depending on how many good blocks we get back to find
+        # a practical maximum
+        self._follow_up_at_most_at_once = 50
 
         asyncio.get_event_loop().call_soon(self.follow_up)
 
@@ -35,14 +37,14 @@ class Seeker:
             ts, h = self._follow_up.get_nowait()
             if not self._chain.has_block(h):
                 still_to_seek.append(h)
-                self._follow_up.put_nowait((ts, h))
+                self._follow_up.put_nowait((time.time(), h))  # need to use current time, not old time
             else:
                 done.add(h)
 
         self._chain.currently_seeking = self._chain.currently_seeking.difference(done)
         self.farm_seek(still_to_seek)
 
-        asyncio.get_event_loop().call_later(self._time_to_wait_before_follow_up // 4, self.follow_up)
+        asyncio.get_event_loop().call_later(self._time_to_wait_before_follow_up, self.follow_up)
 
     def put(self, *block_hashes):
         s = [h for h in block_hashes if h not in self._chain.currently_seeking]

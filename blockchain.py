@@ -123,10 +123,12 @@ class Chain:
         print('COINBASE _add_blk', block.coinbase)
         if self.has_block(block.hash): return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
+        {i for i in block.links if not self.contains_block(i)}
+        {i for i in block.links if not self.orphans.contains_block_hash(i)}
         if not all_true(self.contains_block, block.links):
             print('Rejecting block: don\'t have all links')
             # don't just look for children, get a primary chain
-            self.seek_blocks(block.links)
+            self.seek_blocks({i for i in block.links if not self.orphans.contains_block_hash(i)})
             return block
 
         # success, lets add it
