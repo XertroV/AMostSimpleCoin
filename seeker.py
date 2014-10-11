@@ -25,6 +25,7 @@ class Seeker:
             return False
         peek = self._follow_up.get_nowait()
         self._follow_up.put_nowait(peek)
+        print(peek)
         if current_time() - peek[1] > self._time_to_wait_before_follow_up:
             return True
         return False
@@ -34,13 +35,17 @@ class Seeker:
             return
         still_to_seek = []  # list of block hashes
         done = set()  # block hashes
+        put_soon = []
         while self.any_to_follow_up() and len(still_to_seek) < self._follow_up_at_most_at_once:
             height, ts, h = self._follow_up.get_nowait()
             if not self._chain.has_block(h):
                 still_to_seek.append(h)
-                self._follow_up.put_nowait((height, time.time(), h))  # need to use current time, not old time
+                put_soon.append((height, time.time(), h))  # need to use current time, not old time
             else:
                 done.add(h)
+
+        for t in put_soon:
+            self._put_nowait(*t)
 
         self._chain.currently_seeking = self._chain.currently_seeking.difference(done)
         self.farm_seek(still_to_seek)
