@@ -16,7 +16,7 @@ class Seeker:
         self._time_to_wait_before_follow_up = 2
         # todo: write an alg that changes this variable depending on how many good blocks we get back to find
         # a practical maximum
-        self._follow_up_at_most_at_once = 50
+        self._follow_up_at_most_at_once = 500
 
         asyncio.get_event_loop().call_soon(self.follow_up)
 
@@ -25,7 +25,6 @@ class Seeker:
             return False
         peek = self._follow_up.get_nowait()
         self._follow_up.put_nowait(peek)
-        print(peek)
         if current_time() - peek[1] > self._time_to_wait_before_follow_up:
             return True
         return False

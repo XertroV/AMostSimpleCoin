@@ -265,6 +265,7 @@ class Orphanage:
     def children_of(self, parent_hash):
         # decode bytes into block objects
         print(self._linking_to(keys=[parent_hash]))
+        print({int(i.decode()) for i in self._linking_to(keys=[parent_hash])})
         return {int(i.decode()) for i in self._linking_to(keys=[parent_hash])}
 
     def contains_block_hash(self, block_hash):

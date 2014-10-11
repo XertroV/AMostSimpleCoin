@@ -89,7 +89,7 @@ def set_message_handlers(chain, p2p: Network):
     @p2p.method(BlockRequest, BLOCK_REQUEST, BLOCK_PROVIDE)
     def block_request(peer, request):
         print("Block Request")
-        hashes = request.hashes[:50]  #[:500]  # return at most 500 blocks
+        hashes = request.hashes[:500]  # return at most 500 blocks
         return BlockProvide(blocks=[chain.get_block(h) for h in hashes if chain.has_block(h)])
 
     @p2p.method(BlockProvide, BLOCK_PROVIDE)
@@ -123,7 +123,7 @@ def set_message_handlers(chain, p2p: Network):
     def chain_info_provide(peer, provided):
         print("Chain Info Provide")
         if provided.top_block not in chain.current_node_hashes:
-            size = 10000
+            size = 1000
             n = 0
             print("Chain Info Provide returning")
             return ChainPrimaryRequest(block_locator=chain.make_block_locator(), chunk_size=size, chunk_n=n)
@@ -148,15 +148,15 @@ def set_message_handlers(chain, p2p: Network):
         print(chain.head.to_json(), chain.head.hash)
         print(request.block_locator)
 
-        print("Zipping")
-
-        x = list(zip(*[(b.total_work, b.hash) for b in chain.order_from(chain.get_block(lca), chain.head)[start:start + request.chunk_size]]))
+        x = [(b.total_work, b.hash) for b in chain.order_from(chain.get_block(lca), chain.head)[start:start + request.chunk_size]]
+        total_works = [i[0] for i in x]
+        hashes = [i[1] for i in x]
 
         print("Sending")
 
         return ChainPrimaryProvide(
-            total_works=list(x[0]),
-            hashes=list(x[1]),
+            total_works=total_works,
+            hashes=hashes,
             chunk_n=request.chunk_n,
             chunk_size=request.chunk_size)
 

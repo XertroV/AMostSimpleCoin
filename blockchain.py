@@ -33,6 +33,10 @@ class Chain:
         self.seeker = Seeker(self, self._p2p)  # format: (total_work, block_hash) - get early blocks first
         self.currently_seeking = set()
 
+        # todo: temp till primary chain is done in redis so queries are quick
+        self._primary_chain_head = None
+        self._primary_chain = None
+
         if not self._initialized.is_true:
             self._first_initialize()
             self._initialized.set_true()
@@ -53,12 +57,16 @@ class Chain:
 
     @property
     def primary_chain(self):
-        t = self.head
-        primary_chain = []
-        while not t.is_root:
-            primary_chain = [t] + primary_chain
-            t = self.get_block(t.links[0])
-        return [t] + primary_chain  # root is not included in the above loop
+        # todo : this is so slow! Caching is okay but better is a soln in redis
+        if(self._primary_chain_head is None or self._primary_chain is None or self._primary_chain_head != self.head.hash):  # regen
+            t = self.head
+            primary_chain = []
+            while not t.is_root:
+                primary_chain = [t] + primary_chain
+                t = self.get_block(t.links[0])
+            self._primary_chain = [t] + primary_chain
+            self._primary_chain_head = self.head.hash
+        return self._primary_chain  # root is not included in the above loop
 
     def _get_top_block(self):
         tb_hash = self._db.get_kv(TOP_BLOCK, int)
@@ -107,10 +115,15 @@ class Chain:
         most_recent_block = None
 
         try:
-            for tw, block in total_works:
+            while True:
+                if len(total_works) == 0:
+                    break
+                tw, block = total_works.pop(0)
                 most_recent_block = block
                 r = self._add_block(block)
-                if r is not None:
+                if isinstance(r, list):
+                    total_works.extend([(b.total_work, b) for b in r])
+                elif isinstance(r, Encodium):
                     rejects.append(r)
             print('rejects', rejects)
             for r in rejects:
@@ -126,11 +139,8 @@ class Chain:
         :return: None on success, block if parent missing
         """
         print('_add_block', block.hash)
-        print('COINBASE _add_blk', block.coinbase)
-        if self.has_block(block.hash): return None
+        if block.hash in self.current_node_hashes: return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
-        {i for i in block.links if not self.contains_block(i)}
-        {i for i in block.links if not self.orphans.contains_block_hash(i)}
         if not all_true(self.contains_block, block.links):
             print('Rejecting block: don\'t have all links')
             # don't just look for children, get a primary chain
@@ -147,8 +157,11 @@ class Chain:
         self.block_index[block.hash] = block
         print("Chain._add_block - processed", block.hash)
         orphaned_children = self.orphans.children_of(block.hash)
+        self.orphans.remove(block)
         if len(orphaned_children) > 0:
-            self.add_blocks([self.orphans.get(h) for h in orphaned_children])
+            print([self.orphans.get(h) for h in orphaned_children])
+            return [self.orphans.get(h) for h in orphaned_children]
+        self.orphans.remove(block)
         return None
 
     def _set_height_metadata(self, block):
