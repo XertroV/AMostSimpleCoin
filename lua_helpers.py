@@ -1,3 +1,7 @@
+# This section is a bit messy...
+# Usually a section will have some functions and that string is prepended to all commands. It's a cheap library,
+# sort of. Usually the specific redis function will be _some_name, the function factory thing is get_some_name.
+
 
 _functions = """
 local get_balance = function (path, pub_x)

@@ -34,16 +34,16 @@ class Chain:
         self.currently_seeking = set()
 
         if not self._initialized.is_true:
-            self.first_initialize()
+            self._first_initialize()
             self._initialized.set_true()
 
-    def first_initialize(self):
+    def _first_initialize(self):
         self.heights[0] = self.root.hash
         self.block_heights[self.root.hash] = 0
         self.block_index[self.root.hash] = self.root
         self.all_node_hashes.add(self.root.hash)
         self.state.reset()
-        self.apply_to_state(self.root)
+        self._apply_to_state(self.root)
 
     def _back_up_state(self, backup_path):
         self.state.backup_to(backup_path)
@@ -134,13 +134,13 @@ class Chain:
         block.set_block_index(self.block_index)
         if self.better_than_head(block):
             print('COINBASE _add_blk', block.coinbase)
-            self.reorganize_to(block)
+            self._reorganize_to(block)
         self.all_node_hashes.add(block.hash)
         self.block_index[block.hash] = block
         print("Chain._add_block - processed", block.hash)
         orphaned_children = self.orphans.children_of(block.hash)
-        if orphaned_children is not None:
-            self.add_blocks(list(orphaned_children))
+        if len(orphaned_children) > 0:
+            self.add_blocks([self.orphans.get(h) for h in orphaned_children])
         return None
 
     def _set_height_metadata(self, block):
@@ -151,12 +151,12 @@ class Chain:
     def _update_metadata(self, block):
         self._set_height_metadata(block)
 
-    def reorganize_to(self, block):
+    def _reorganize_to(self, block):
         print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self.block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
-        self.mass_unapply(self.order_from(pivot, self.head))
+        self._mass_unapply(self.order_from(pivot, self.head))
         print('COINBASE _re_org_', block.coinbase)
-        self.mass_apply(self.order_from(pivot, block))
+        self._mass_apply(self.order_from(pivot, block))
         print('Current State')
         pp(self.state.full_state())
         self.head = block
@@ -177,20 +177,21 @@ class Chain:
         self._restore_backed_up_state(temp_path)
         return state_hash
 
-    def valid_for_state(self, block):
+    def _valid_for_state(self, block):
         state_hash = self._get_next_state_hash_not_threadsafe(block)
         assert_equal(block.state_hash, state_hash)
         if block.tx is not None:
             assert self.state.get(block.tx.signature.pub_x) >= block.tx.total
         return True
 
-    def apply_to_state(self, block):
+    def _apply_to_state(self, block):
         with self.state.lock:
             print('COINBASE _aply_st', block.coinbase)
-            assert self.valid_for_state(block)
+            assert self._valid_for_state(block)
+            assert self._valid_for_state(block)
             self._modify_state(block, 1)
 
-    def unapply_to_state(self, block):
+    def _unapply_to_state(self, block):
         self._modify_state(block, -1)
 
     def _modify_state(self, block, direction):
@@ -200,15 +201,15 @@ class Chain:
             self.state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)
         self.state.modify_balance(block.coinbase, direction * block.coins_generated)
 
-    def mass_unapply(self, path):
+    def _mass_unapply(self, path):
         for block in path[::-1]:
-            self.unapply_to_state(block)
+            self._unapply_to_state(block)
 
-    def mass_apply(self, path):
+    def _mass_apply(self, path):
         print(path)
         for block in path:
             print('COINBASE _ms_aply', block.coinbase)
-            self.apply_to_state(block)
+            self._apply_to_state(block)
             if block in self.orphans:
                 self.orphans.remove(block)
 

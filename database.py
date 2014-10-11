@@ -254,10 +254,18 @@ class Orphanage:
         return self._remove(keys=[block.hash, block.links[0]])
 
     def add(self, block: SimpleBlock):
-        return self._add(keys=[block, block.hash, block.links[0]])
+        return self._add(keys=[block.to_json(), block.hash, block.links[0]])
+
+    def get(self, block_hash):
+        block = self._get(keys=[block_hash])
+        if block is not None:
+            block = SimpleBlock.from_json(block.decode())
+        return block
 
     def children_of(self, parent_hash):
-        return self._linking_to(keys=[parent_hash])
+        # decode bytes into block objects
+        print(self._linking_to(keys=[parent_hash]))
+        return {int(i.decode()) for i in self._linking_to(keys=[parent_hash])}
 
     def contains_block_hash(self, block_hash):
         return self._contains(keys=[block_hash])

@@ -31,7 +31,8 @@ class Miner:
         nice_sleep(self._p2p, 3)  # warm up
         while not self._stop and not self._p2p.is_shutdown:
             self.start()
-            nice_sleep(self._p2p, random.randint(3, 10))
+            nice_sleep(self._p2p, random.randint(60, 120))
+            #nice_sleep(self._p2p, 0.5)
 
     def start(self, work_target=10**5+1):
         chain_head = self._chain.head

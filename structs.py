@@ -102,6 +102,12 @@ class SimpleBlock(Encodium):
         self.tx = None
         super().__init__(*args, **kwargs)
 
+    def __str__(self):
+        return "<"+self.__class__.__name__+" "+self.to_json()+">"
+
+    def __repr__(self):
+        return self.__str__()
+
     def __hash__(self):
         return self.hash
 

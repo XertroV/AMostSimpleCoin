@@ -143,7 +143,7 @@ def set_message_handlers(chain, p2p: Network):
         print(request.block_locator)
 
         return ChainPrimaryProvide(
-            hashes=[b.hash for b in chain.order_from(chain.get_block(lca), chain.head)[max(0, start - 10):start + request.chunk_size]],
+            hashes=[b.hash for b in chain.order_from(chain.get_block(lca), chain.head)[start:start + request.chunk_size]],
             chunk_n=request.chunk_n,
             chunk_size=request.chunk_size)
 
@@ -153,6 +153,7 @@ def set_message_handlers(chain, p2p: Network):
         size = provided.chunk_size
         n = provided.chunk_n
 
+        # todo: this needs to be async
         chain.seek_blocks(provided.hashes)
 
         if len(provided.hashes) >= size:
