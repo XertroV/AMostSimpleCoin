@@ -71,14 +71,34 @@ class RedisFlag(_RedisObject):
             return self._r.get(self._path) == b'True'
         return False
 
+def generate(o):
+    while True:
+        yield o
+
+def ensure_type(f):
+    # f should be a class method
+    def inner(instance: _RedisObject, *args, **kwargs):
+        r = f(instance, *args, **kwargs)
+        if isinstance(r, bytes):
+            return parse_type_over(instance._type, r)
+        return many_parse_type_over(generate(instance._type), r)
+    return inner
+
 
 class RedisList(_RedisObject):
 
+    @ensure_type
     def __getitem__(self, item):
         if isinstance(item, slice):
-            if item.step != 1:
+            start, stop = item.start, item.stop
+            if item.step != None:
                 raise NotImplemented("Steps in slices is not implemented for RedisList")
-            return self._r.lrange(self._path, item.start, item.stop)
+            if stop == None:
+                stop = self._r.llen(self._path)
+            if start == None:
+                start = 0
+            return self._r.lrange(self._path, start, stop - 1)  # need to subtract 1 because redis is inclusive, but python exclusive
+        return self._r.lindex(self._path, item)
 
     def __setitem__(self, key, value):
         return self._r.lset(self._path, key, serialize_if_encodium(value))
@@ -90,10 +110,10 @@ class RedisList(_RedisObject):
         return self._r.rpush(self._path, *values)
 
     def lpop(self):
-        return self._r.lpop(self._path)
+        return parse_type_over(self._type, self._r.lpop(self._path))
 
     def rpop(self):
-        return self._r.rpop(self._path)
+        return parse_type_over(self._type, self._r.rpop(self._path))
 
 
 class RedisSet(_RedisObject):
@@ -104,7 +124,6 @@ class RedisSet(_RedisObject):
 
     def __next__(self):
         return self._set_iterator.__next__()
-
 
     def __len__(self):
         return self._db.redis.scard(self._path)

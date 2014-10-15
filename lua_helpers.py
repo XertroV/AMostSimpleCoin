@@ -75,8 +75,12 @@ def get_get_balance(r, path):
 # Orphanage
 #
 
-with open('lua_scripts/orphanage.lua') as f:
-    orphanage_functions = ''.join(f.readlines())
+try:
+    with open('lua_scripts/orphanage.lua') as f:
+        orphanage_functions = ''.join(f.readlines())
+except:  # todo : this is for tests, shouldn't be included forever though
+    with open('../lua_scripts/orphanage.lua') as f:
+        orphanage_functions = ''.join(f.readlines())
 
 def make_orphanage_script(r, lua_code, path):
     #print("Script", orphanage_functions + lua_code)
