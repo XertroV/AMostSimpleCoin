@@ -8,7 +8,7 @@ from WSSTT import Network
 from structs import *
 from helpers import *
 from seeker import Seeker
-from database import Database, RedisFlag, RedisHashMap, RedisSet, State, Orphanage
+from database import Database, RedisFlag, RedisHashMap, RedisSet, State, Orphanage, PrimaryChain
 
 # TODO : figure out best where to hook DB in
 TOP_BLOCK = 'top_block'
@@ -22,7 +22,7 @@ class Chain:
         self._state = State(self._db)
 
         self._orphans = Orphanage(self._db)
-        self._current_node_hashes = RedisSet(db, 'all_nodes')
+        self.current_node_hashes = RedisSet(db, 'all_nodes')
         self._block_index = RedisHashMap(db, 'block_index', int, SimpleBlock)
         self._block_heights = RedisHashMap(db, 'block_heights', int, int)
         self._heights = RedisHashMap(db, 'heights', int)
@@ -34,8 +34,7 @@ class Chain:
         self.currently_seeking = set()
 
         # todo: temp till primary chain is done in redis so queries are quick
-        self._primary_chain_head = None
-        self._primary_chain = None
+        self._primary_chain = PrimaryChain(self._db, 'primary_chain')
 
         if not self._initialized.is_true:
             self._first_initialize()
@@ -45,9 +44,10 @@ class Chain:
         self._heights[0] = self.root.hash
         self._block_heights[self.root.hash] = 0
         self._block_index[self.root.hash] = self.root
-        self._current_node_hashes.add(self.root.hash)
+        self.current_node_hashes.add(self.root.hash)
         self._state.reset()
         self._apply_to_state(self.root)
+        self._primary_chain.append_hashes([self.root.hash])
 
     def _back_up_state(self, backup_path):
         self._state.backup_to(backup_path)
@@ -57,16 +57,7 @@ class Chain:
 
     @property
     def primary_chain(self):
-        # todo : this is so slow! Caching is okay but better is a soln in redis
-        if(self._primary_chain_head is None or self._primary_chain is None or self._primary_chain_head != self.head.hash):  # regen
-            t = self.head
-            primary_chain = []
-            while not t.is_root:
-                primary_chain = [t] + primary_chain
-                t = self.get_block(t.links[0])
-            self._primary_chain = [t] + primary_chain
-            self._primary_chain_head = self.head.hash
-        return self._primary_chain  # root is not included in the above loop
+        return self._primary_chain.get_all()
 
     def _get_top_block(self):
         tb_hash = self._db.get_kv(TOP_BLOCK, int)
@@ -91,10 +82,10 @@ class Chain:
         return self._block_heights[block_hash]
 
     def has_block(self, block_hash):
-        return block_hash in self._current_node_hashes or self._orphans.contains_block_hash(block_hash)
+        return block_hash in self.current_node_hashes or self._orphans.contains_block_hash(block_hash)
 
     def contains_block(self, block_hash):
-        return block_hash in self._current_node_hashes
+        return block_hash in self.current_node_hashes
 
     def get_block(self, block_hash):
         return self._block_index[block_hash]
@@ -139,7 +130,7 @@ class Chain:
         :return: None on success, block if parent missing
         """
         print('_add_block', block.hash)
-        if block.hash in self._current_node_hashes: return None
+        if block.hash in self.current_node_hashes: return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.contains_block, block.links):
             print('Rejecting block: don\'t have all links')
@@ -153,7 +144,7 @@ class Chain:
         if self.better_than_head(block):
             print('COINBASE _add_blk', block.coinbase)
             self._reorganize_to(block)
-        self._current_node_hashes.add(block.hash)
+        self.current_node_hashes.add(block.hash)
         self._block_index[block.hash] = block
         print("Chain._add_block - processed", block.hash)
         orphaned_children = self._orphans.children_of(block.hash)
@@ -172,12 +163,22 @@ class Chain:
     def _update_metadata(self, block):
         self._set_height_metadata(block)
 
+    def _mass_primary_chain_apply(self, path):
+        self._primary_chain.append_hashes([b.hash for b in path])
+
+    def _mass_primary_chain_unapply(self, path):
+        self._primary_chain.remove_hashes([b.hash for b in path])
+
     def _reorganize_to(self, block):
         print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self._block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
-        self._mass_unapply(self.order_from(pivot, self.head))
+        unapply_path = self.order_from(pivot, self.head)
+        self._mass_unapply(unapply_path)
+        self._mass_primary_chain_unapply(unapply_path)
         print('COINBASE _re_org_', block.coinbase)
-        self._mass_apply(self.order_from(pivot, block))
+        apply_path = self.order_from(pivot, block)
+        self._mass_apply(apply_path)
+        self._mass_primary_chain_apply(apply_path)
         print('Current State')
         pp(self._state.full_state())
         self.head = block
@@ -245,7 +246,7 @@ class Chain:
         i = 0
         c = 0
         while h - c >= 0:
-            locator.append(self.primary_chain[h - c].hash)
+            locator.append(self.primary_chain[h - c])
             c = 2**i
             i += 1
 

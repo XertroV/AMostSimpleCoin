@@ -234,6 +234,35 @@ class State(_RedisObject):
         return self._hash
 
 
+class PrimaryChain:
+    """ PrimaryChain is a list of hashes representing the primary chain.
+    """
+    def __init__(self, db, path="primary_chain"):
+        self._db = db
+        self._r = r = db.redis
+        self._path = path
+        self._type = int
+
+        self._chain = RedisList(db, path, int)
+
+        self._get_all = lua_helpers.get_primary_chain_get_all(r, path)
+        self._remove = lua_helpers.get_primary_chain_remove(r, path)
+        self._append = lua_helpers.get_primary_chain_append(r, path)
+        self._contains = lua_helpers.get_primary_chain_contains(r, path)
+
+    @ensure_type
+    def get_all(self):
+        return self._get_all()
+
+    def append_hashes(self, block_hashes):
+        self._append(keys=block_hashes)
+
+    def remove_hashes(self, block_hashes):
+        self._remove(keys=block_hashes)
+
+    def contains(self, block_hash):
+        return bool(self._contains(keys=[block_hash]))
+
 
 class Orphanage:
     """ An Orphanage holds orphans.

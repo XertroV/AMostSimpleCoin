@@ -60,6 +60,7 @@ if "-create_root" in sys.argv:
 
 try:
     start_threads(chain, p2p)
+    if "-fast" in sys.argv: miner.mine_fast()
     if "-mine" in sys.argv: fire(miner.run)
     p2p.run()
 except KeyboardInterrupt:

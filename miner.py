@@ -18,6 +18,10 @@ class Miner:
         self._mining_thread = None
         self._stop = False
         self._coinbase = coinbase
+        self._mine_fast = False
+
+    def mine_fast(self):
+        self._mine_fast = True
 
     def stop(self):
         self._stop = True
@@ -31,8 +35,10 @@ class Miner:
         nice_sleep(self._p2p, 3)  # warm up
         while not self._stop and not self._p2p.is_shutdown:
             self.start()
-            nice_sleep(self._p2p, random.randint(60, 120))
-            #nice_sleep(self._p2p, 0.5)
+            if self._mine_fast:
+                nice_sleep(self._p2p, 0.5)
+            else:
+                nice_sleep(self._p2p, random.randint(60, 120))
 
     def start(self, work_target=10**5+1):
         chain_head = self._chain.head

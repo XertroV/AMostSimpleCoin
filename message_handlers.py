@@ -126,6 +126,7 @@ def set_message_handlers(chain, p2p: Network):
             size = 1000
             n = 0
             print("Chain Info Provide returning")
+            print(chain.primary_chain)
             return ChainPrimaryRequest(block_locator=chain.make_block_locator(), chunk_size=size, chunk_n=n)
         print("Chain Info Provide did nothing")
 
@@ -134,10 +135,10 @@ def set_message_handlers(chain, p2p: Network):
         print("Primary Chain")
         start = request.chunk_size * request.chunk_n
 
-        primary_chain_set = {i.hash for i in chain.primary_chain}
+        primary_chain_set = {i for i in chain.primary_chain}
         lca = chain.root.hash
         for block_hash in request.block_locator:
-            if chain.get_block(block_hash) in primary_chain_set:
+            if block_hash in primary_chain_set:
                 lca = block_hash
             else:
                 break
