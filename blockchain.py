@@ -19,18 +19,18 @@ class Chain:
         self._p2p = p2p
         self.root = root
 
-        self.state = State(self._db)
+        self._state = State(self._db)
 
-        self.orphans = Orphanage(self._db)
-        self.current_node_hashes = RedisSet(db, 'all_nodes')
-        self.block_index = RedisHashMap(db, 'block_index', int, SimpleBlock)
-        self.block_heights = RedisHashMap(db, 'block_heights', int, int)
-        self.heights = RedisHashMap(db, 'heights', int)
+        self._orphans = Orphanage(self._db)
+        self._current_node_hashes = RedisSet(db, 'all_nodes')
+        self._block_index = RedisHashMap(db, 'block_index', int, SimpleBlock)
+        self._block_heights = RedisHashMap(db, 'block_heights', int, int)
+        self._heights = RedisHashMap(db, 'heights', int)
         self._initialized = RedisFlag(db, 'initialized')
 
         self.head = self._get_top_block()
 
-        self.seeker = Seeker(self, self._p2p)  # format: (total_work, block_hash) - get early blocks first
+        self._seeker = Seeker(self, self._p2p)  # format: (total_work, block_hash) - get early blocks first
         self.currently_seeking = set()
 
         # todo: temp till primary chain is done in redis so queries are quick
@@ -42,18 +42,18 @@ class Chain:
             self._initialized.set_true()
 
     def _first_initialize(self):
-        self.heights[0] = self.root.hash
-        self.block_heights[self.root.hash] = 0
-        self.block_index[self.root.hash] = self.root
-        self.current_node_hashes.add(self.root.hash)
-        self.state.reset()
+        self._heights[0] = self.root.hash
+        self._block_heights[self.root.hash] = 0
+        self._block_index[self.root.hash] = self.root
+        self._current_node_hashes.add(self.root.hash)
+        self._state.reset()
         self._apply_to_state(self.root)
 
     def _back_up_state(self, backup_path):
-        self.state.backup_to(backup_path)
+        self._state.backup_to(backup_path)
 
     def _restore_backed_up_state(self, backup_path):
-        self.state.restore_backup_from(backup_path)
+        self._state.restore_backup_from(backup_path)
 
     @property
     def primary_chain(self):
@@ -73,31 +73,31 @@ class Chain:
         if tb_hash is None:
             self._set_top_block(self.root)
             return self.root
-        return self.block_index[tb_hash]
+        return self._block_index[tb_hash]
 
     def _set_top_block(self, top_block):
         return self._db.set_kv(TOP_BLOCK, top_block.hash)
 
     def seek_blocks(self, block_hashes):
-        self.seeker.put(*[h for h in block_hashes if not self.has_block(h)])
+        self._seeker.put(*[h for h in block_hashes if not self.has_block(h)])
 
     def seek_blocks(self, block_hashes):
-        self.seeker.put(*[h for h in block_hashes if not self.has_block(h)])
+        self._seeker.put(*[h for h in block_hashes if not self.has_block(h)])
 
     def seek_blocks_with_total_work(self, pairs):
-        self.seeker.put_with_work(*pairs)
+        self._seeker.put_with_work(*pairs)
 
     def height_of_block(self, block_hash):
-        return self.block_heights[block_hash]
+        return self._block_heights[block_hash]
 
     def has_block(self, block_hash):
-        return block_hash in self.current_node_hashes or self.orphans.contains_block_hash(block_hash)
+        return block_hash in self._current_node_hashes or self._orphans.contains_block_hash(block_hash)
 
     def contains_block(self, block_hash):
-        return block_hash in self.current_node_hashes
+        return block_hash in self._current_node_hashes
 
     def get_block(self, block_hash):
-        return self.block_index[block_hash]
+        return self._block_index[block_hash]
 
     def add_blocks(self, blocks):
         # todo : design some better sorting logic.
@@ -127,7 +127,7 @@ class Chain:
                     rejects.append(r)
             print('rejects', rejects)
             for r in rejects:
-                self.orphans.add(r)
+                self._orphans.add(r)
         except Exception as e:
             self._restore_backed_up_state(some_path)
             traceback.print_exc()
@@ -139,54 +139,54 @@ class Chain:
         :return: None on success, block if parent missing
         """
         print('_add_block', block.hash)
-        if block.hash in self.current_node_hashes: return None
+        if block.hash in self._current_node_hashes: return None
         if not block.acceptable_work: raise InvalidBlockException('Unacceptable work')
         if not all_true(self.contains_block, block.links):
             print('Rejecting block: don\'t have all links')
             # don't just look for children, get a primary chain
-            self.seek_blocks({i for i in block.links if not self.orphans.contains_block_hash(i)})
+            self.seek_blocks({i for i in block.links if not self._orphans.contains_block_hash(i)})
             return block
 
         # success, lets add it
         self._update_metadata(block)
-        block.set_block_index(self.block_index)
+        block.set_block_index(self._block_index)
         if self.better_than_head(block):
             print('COINBASE _add_blk', block.coinbase)
             self._reorganize_to(block)
-        self.current_node_hashes.add(block.hash)
-        self.block_index[block.hash] = block
+        self._current_node_hashes.add(block.hash)
+        self._block_index[block.hash] = block
         print("Chain._add_block - processed", block.hash)
-        orphaned_children = self.orphans.children_of(block.hash)
-        self.orphans.remove(block)
+        orphaned_children = self._orphans.children_of(block.hash)
+        self._orphans.remove(block)
         if len(orphaned_children) > 0:
-            print([self.orphans.get(h) for h in orphaned_children])
-            return [self.orphans.get(h) for h in orphaned_children]
-        self.orphans.remove(block)
+            print([self._orphans.get(h) for h in orphaned_children])
+            return [self._orphans.get(h) for h in orphaned_children]
+        self._orphans.remove(block)
         return None
 
     def _set_height_metadata(self, block):
-        height = self.block_heights[block.links[0]] + 1
-        self.block_heights[block.hash] = height
-        self.heights[height] = block.hash
+        height = self._block_heights[block.links[0]] + 1
+        self._block_heights[block.hash] = height
+        self._heights[height] = block.hash
 
     def _update_metadata(self, block):
         self._set_height_metadata(block)
 
     def _reorganize_to(self, block):
-        print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self.block_heights[block.hash]))
+        print('reorg from %064x\nto         %064x\nheight of  %d' % (self.head.hash, block.hash, self._block_heights[block.hash]))
         pivot = self.find_pivot(self.head, block)
         self._mass_unapply(self.order_from(pivot, self.head))
         print('COINBASE _re_org_', block.coinbase)
         self._mass_apply(self.order_from(pivot, block))
         print('Current State')
-        pp(self.state.full_state())
+        pp(self._state.full_state())
         self.head = block
         self._set_top_block(self.head)
 
     # Coin & State methods
 
     def get_next_state_hash(self, block):
-        with self.state.lock:
+        with self._state.lock:
             state_hash = self._get_next_state_hash_not_threadsafe(block)
         return state_hash
 
@@ -194,7 +194,7 @@ class Chain:
         temp_path = str(random.randint(1000,1000000))
         self._back_up_state(temp_path)
         self._modify_state(block, 1)
-        state_hash = self.state.hash
+        state_hash = self._state.hash
         self._restore_backed_up_state(temp_path)
         return state_hash
 
@@ -202,11 +202,11 @@ class Chain:
         state_hash = self._get_next_state_hash_not_threadsafe(block)
         assert_equal(block.state_hash, state_hash)
         if block.tx is not None:
-            assert self.state.get(block.tx.signature.pub_x) >= block.tx.total
+            assert self._state.get(block.tx.signature.pub_x) >= block.tx.total
         return True
 
     def _apply_to_state(self, block):
-        with self.state.lock:
+        with self._state.lock:
             print('COINBASE _aply_st', block.coinbase)
             assert self._valid_for_state(block)
             assert self._valid_for_state(block)
@@ -218,9 +218,9 @@ class Chain:
     def _modify_state(self, block, direction):
         assert direction in [-1, 1]
         if block.tx is not None:
-            self.state.modify_balance(block.tx.recipient, direction * block.tx.value)
-            self.state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)
-        self.state.modify_balance(block.coinbase, direction * block.coins_generated)
+            self._state.modify_balance(block.tx.recipient, direction * block.tx.value)
+            self._state.modify_balance(block.tx.signature.pub_x, -1 * direction * block.tx.value)
+        self._state.modify_balance(block.coinbase, direction * block.coins_generated)
 
     def _mass_unapply(self, path):
         for block in path[::-1]:
@@ -231,8 +231,8 @@ class Chain:
         for block in path:
             print('COINBASE _ms_aply', block.coinbase)
             self._apply_to_state(block)
-            if block in self.orphans:
-                self.orphans.remove(block)
+            if block in self._orphans:
+                self._orphans.remove(block)
 
     def better_than_head(self, block):
         return block.total_work > self.head.total_work
@@ -240,7 +240,7 @@ class Chain:
     def make_block_locator(self):
         locator = []
 
-        h = self.block_heights[self.head.hash]
+        h = self._block_heights[self.head.hash]
         print(h, self.head.hash)
         i = 0
         c = 0
